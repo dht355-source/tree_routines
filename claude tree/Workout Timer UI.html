@@ -1,0 +1,3448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Workout Player</title>
+  <link rel="manifest" href="./manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap"
+    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body,
+    #root {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: #F5F2EC;
+    }
+
+    *:focus-visible {
+      outline: 2px solid #2d2d2d;
+      outline-offset: 4px;
+      border-radius: 4px;
+    }
+
+    button:focus-visible {
+      outline: 2px solid #00c9a7;
+    }
+
+    /* Theme transition — applied during switch, removed after so hover stays instant */
+    .theme-transitioning,
+    .theme-transitioning * {
+      transition:
+        background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        color            0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color     0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow       0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes checkDraw {
+      from {
+        stroke-dashoffset: 48;
+      }
+
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes gentlePulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
+    }
+
+    @keyframes confettiDrift {
+      0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+      }
+
+      100% {
+        transform: translateY(120vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+
+    @keyframes slideInRight {
+      from {
+        opacity: 0;
+        transform: translateX(30px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes breathe {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.02);
+      }
+    }
+
+    @keyframes springIn {
+      0% { opacity: 0; transform: scale(0.92); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes particleBurst {
+      0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(var(--dx), var(--dy)) scale(0.3);
+      }
+    }
+
+    @keyframes slabFlood {
+      0% {
+        height: 52px;
+        border-radius: 16px 16px 0 0;
+      }
+
+      100% {
+        height: 100vh;
+        border-radius: 0;
+      }
+    }
+
+    @keyframes floodFadeOut {
+      0% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+
+    ::selection {
+      background: rgba(0, 201, 167, 0.2);
+    }
+
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(26, 26, 26, 0.15);
+      border-radius: 4px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ─── CONFIG ────────────────────────────────────────────────────────
+    const WEBHOOK_URL = "https://hook.eu2.make.com/zvc9dljmjafaub5v0xln6jkg2bifq68r";
+    const WEBHOOK_NOTES_URL = "https://hook.eu2.make.com/j4di64bhdk11xk1rlug37aamc3m7zu1f";
+
+    // ─── DESIGN TOKENS ────────────────────────────────────────────────
+    const EMOJI_MAP = {
+      "💪": "fitness_center",
+      "🧘": "self_improvement",
+      "🏃": "directions_run",
+      "🧗": "terrain",
+      "🤸": "sports_gymnastics",
+      "🏋️": "fitness_center",
+      "🫁": "air",
+      "🚪": "sensor_door",
+      "🏠": "home",
+      "⏱️": "timer",
+      "🔥": "local_fire_department",
+      "✨": "auto_awesome",
+      "✅": "check_circle",
+      "⚠️": "warning",
+      "👍": "thumb_up",
+      "😌": "sentiment_satisfied",
+      "😮‍💨": "air", // or something similar
+    };
+    function getIcon(emoji) { return EMOJI_MAP[emoji] || null; }
+
+    const C = {
+      bg: "#F5F2EC",
+      surface: "#EDEAE2",
+      surfaceHigh: "#E5E1D8",
+      surfaceHigher: "#DAD6CC",
+      onBg: "#1A1A1A",
+      sub: "#3D3D3D",
+      muted: "#888580",
+      faint: "rgba(26,26,26,0.10)",
+      faintHover: "rgba(26,26,26,0.16)",
+      danger: "#E05050",
+      dangerDim: "rgba(224,80,80,0.10)",
+      success: "#7DCE54",
+      primary: "#00C9A7",
+      primaryDim: "rgba(0,201,167,0.12)",
+      primaryGlow: "rgba(0,201,167,0.06)",
+      accent: "#FFB347",
+      accentDim: "rgba(255,179,71,0.12)",
+      rest: "#C77DFF",
+      restDim: "rgba(199,125,255,0.12)",
+      onPrimary: "#FFFFFF",
+      onAccent: "#1A1400",
+    };
+    // 7-color exercise palette (bold, saturated)
+    const EXERCISE_COLORS = [
+      "#FF6B6B",  // 0 Coral
+      "#FFB347",  // 1 Amber
+      "#7DCE54",  // 2 Lime
+      "#00C9A7",  // 3 Teal
+      "#4CC9F0",  // 4 Sky
+      "#C77DFF",  // 5 Lavender
+      "#FF6F91",  // 6 Rose
+    ];
+    // ─── SEED GEN ──────────────────────────────────────────────────────
+    function xmur3(str) {
+      let h = 1779033703 ^ str.length;
+      for (let i = 0; i < str.length; i++) {
+        h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+        h = h << 13 | h >>> 19;
+      }
+      return function () {
+        h = Math.imul(h ^ h >>> 16, 2246822507);
+        h = Math.imul(h ^ h >>> 13, 3266489909);
+        return (h ^= h >>> 16) >>> 0;
+      }
+    }
+    function sfc32(a, b, c, d) {
+      return function () {
+        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+        let t = (a + b | 0) + d | 0;
+        d = d + 1 | 0;
+        a = b ^ b >>> 9;
+        b = c + (c << 3) | 0;
+        c = c << 21 | c >>> 11;
+        c = c + t | 0;
+        return (t >>> 0) / 4294967296;
+      }
+    }
+
+    // 5 M3E shape names (cycle by set index)
+    const SHAPE_NAMES = ["diamond", "gem", "cookie", "flower", "daisy"];
+
+    // Procedurally shift the base exercise color using the same seed mechanics as the trees
+    function exerciseColor(stepIndex) {
+      if (!window.THREE) return EXERCISE_COLORS[stepIndex % EXERCISE_COLORS.length];
+      const baseHex = EXERCISE_COLORS[stepIndex % EXERCISE_COLORS.length];
+      const seedGen = xmur3("tree_" + stepIndex);
+      const rand = sfc32(seedGen(), seedGen(), seedGen(), seedGen());
+      const hueShift = (rand() - 0.5) * 0.4;
+      const satShift = (rand() - 0.5) * 0.4;
+      const lightShift = (rand() - 0.5) * 0.2;
+
+      const color = new window.THREE.Color(baseHex);
+      const hsl = {};
+      color.getHSL(hsl);
+      hsl.h = (hsl.h + hueShift + 1.0) % 1.0;
+      hsl.s = Math.max(0, Math.min(1, hsl.s + satShift));
+      hsl.l = Math.max(0, Math.min(1, hsl.l + lightShift));
+      color.setHSL(hsl.h, hsl.s, hsl.l);
+      return '#' + color.getHexString();
+    }
+    function makeTreeTheme(exColor, darkOverride = null) {
+      if (!window.THREE) {
+        return { bg: C.bg, light: true, trunk: [C.sub, C.muted], inner: [exColor, exColor], mid: [exColor, exColor], outer: [exColor, '#ffffff'], depth: 6, girth: 1.0, curve: 1.0, spread: 1.1, density: 1.0, dotSize: 1.2, wind: 1.0 };
+      }
+      const base = new window.THREE.Color(exColor);
+      const hsl = {};
+      base.getHSL(hsl);
+      const col = (h, s, l) => '#' + new window.THREE.Color().setHSL(h, s, l).getHexString();
+      const h = hsl.h, s = hsl.s, l = hsl.l;
+
+      // Logic for dark theme override
+      const isDark = darkOverride === "dark";
+      const bg = isDark ? "#0A0A0A" : C.bg;
+      
+      return {
+        bg: bg,
+        light: !isDark,
+        trunk: isDark ? [col(h, 0.1, 0.15), col(h, 0.15, 0.25)] : [col(h, 0.12, 0.20), col(h, 0.18, 0.30)],
+        inner: [col(h, Math.min(s * 1.1, 1), Math.max(l * 0.5, 0.2)), col(h, Math.min(s, 1), Math.max(l * 0.62, 0.25))],
+        mid:   [exColor, col((h + 0.025) % 1, s * 0.85, Math.min(l * 1.1, 0.75))],
+        outer: [col(h, s * 0.55, Math.min(l + 0.22, 0.88)), col(h, s * 0.28, Math.min(l + 0.32, 0.93)), col((h + 0.04) % 1, s * 0.60, Math.min(l + 0.15, 0.85))],
+        depth: 6, girth: 1.0, curve: 1.0, spread: 1.1, density: 1.1, dotSize: 1.3, wind: 1.0,
+      };
+    }
+    function shapeName(setIndex) { return SHAPE_NAMES[setIndex % SHAPE_NAMES.length]; }
+
+    // ─── TREE THEMES (7, mapped to exercise color palette) ────────────
+    // light:true = pale bg (dark text), light:false = dark bg (white text)
+    const TREE_THEMES = [
+      { // 0 – Coral · Sunset & Embers
+        bg: '#0B0D12', light: false,
+        trunk: ['#1A1C24', '#3E4254', '#798198'], inner: ['#B83B1A', '#AA4A2E'],
+        mid: ['#DE6E3F', '#E88B5A'], outer: ['#FFB58A', '#FFD8B8', '#F29672'],
+        depth: 6, girth: 1.2, curve: 0.8, spread: 1.1, density: 1.2, dotSize: 1.5, wind: 0.8
+      },
+      { // 1 – Amber · Desert Acacia
+        bg: '#FDF5E0', light: true,
+        trunk: ['#4A2800', '#6D3B00'], inner: ['#8D6040', '#795040'],
+        mid: ['#FF9100', '#FFB300'], outer: ['#FFD740', '#FFF5C0', '#FFB74D'],
+        depth: 5, girth: 0.8, curve: 1.5, spread: 1.8, density: 0.6, dotSize: 0.8, wind: 1.2
+      },
+      { // 2 – Lime · Night Jungle
+        bg: '#010D01', light: false,
+        trunk: ['#0A1E04', '#193208'], inner: ['#1B5E20', '#2E7D32'],
+        mid: ['#43A047', '#66BB6A'], outer: ['#A5D6A7', '#B9F6CA', '#69F0AE'],
+        depth: 7, girth: 1.0, curve: 1.2, spread: 1.0, density: 1.5, dotSize: 2.0, wind: 0.6
+      },
+      { // 3 – Teal · Bioluminescent Deep Sea
+        bg: '#00070A', light: false,
+        trunk: ['#002030', '#003040'], inner: ['#005F6B', '#00838F'],
+        mid: ['#00BCD4', '#26C6DA'], outer: ['#80DEEA', '#00E5FF', '#64FFDA'],
+        depth: 6, girth: 0.7, curve: 2.0, spread: 1.5, density: 0.8, dotSize: 1.2, wind: 2.5
+      },
+      { // 4 – Sky · Arctic Winter
+        bg: '#EBF5FB', light: true,
+        trunk: ['#37474F', '#546E7A'], inner: ['#0277BD', '#0288D1'],
+        mid: ['#4FC3F7', '#81D4FA'], outer: ['#B3E5FC', '#E8F7FF', '#FFFFFF'],
+        depth: 5, girth: 1.0, curve: 1.0, spread: 0.6, density: 0.4, dotSize: 0.6, wind: 2.0
+      },
+      { // 5 – Lavender · Twilight Mystic
+        bg: '#040008', light: false,
+        trunk: ['#1A0033', '#2A0047'], inner: ['#4A148C', '#6A1B9A'],
+        mid: ['#AB47BC', '#CE93D8'], outer: ['#E1BEE7', '#F0E0FF', '#C77DFF'],
+        depth: 6, girth: 0.9, curve: 1.3, spread: 1.2, density: 1.0, dotSize: 1.0, wind: 1.5
+      },
+      { // 6 – Rose · Cherry Blossom
+        bg: '#FFF0F4', light: true,
+        trunk: ['#3E2723', '#4E342E'], inner: ['#880E4F', '#AD1457'],
+        mid: ['#F06292', '#F48FB1'], outer: ['#FCE4EC', '#FFFFFF', '#FF80AB'],
+        depth: 6, girth: 1.1, curve: 1.0, spread: 1.3, density: 1.8, dotSize: 1.5, wind: 0.9
+      },
+    ];
+
+    // ─── TREE BACKGROUND (Three.js stippled plant, grows with timer) ──
+    const _treeGenCache = {};
+    function TreeBackground({ exerciseKey, themeIndex, duration, growing, startCompleted, customTheme, sceneType = "single" }) {
+      const mountRef = useRef(null);
+      const growRef = useRef(growing);
+      const startCompletedRef = useRef(startCompleted);
+      const durationRef = useRef(duration);
+
+      useEffect(() => { growRef.current = growing; }, [growing]);
+      useEffect(() => { startCompletedRef.current = startCompleted; }, [startCompleted]);
+      useEffect(() => { durationRef.current = duration; }, [duration]);
+
+      useEffect(() => {
+        const mount = mountRef.current;
+        if (!mount || !window.THREE) return;
+        const T = window.THREE;
+        const theme = customTheme || TREE_THEMES[themeIndex] || TREE_THEMES[0];
+
+        // ── Seeded Random ──
+        const seedGen = xmur3("tree_" + exerciseKey);
+        const rand = sfc32(seedGen(), seedGen(), seedGen(), seedGen());
+
+        // ── Color parsing & Procedural Shift ──
+        const isDarkTheme = !theme.light;
+        const hueShift = (rand() - 0.5) * 0.4;
+        const satShift = (rand() - 0.5) * 0.4;
+        const lightShift = (rand() - 0.5) * 0.2;
+
+        const shiftRGB = (baseHex, isTrunk = false) => {
+          const color = new T.Color(baseHex);
+          const hsl = {};
+          color.getHSL(hsl);
+          hsl.h = (hsl.h + hueShift + 1.0) % 1.0;
+          hsl.s = T.MathUtils.clamp(hsl.s + satShift, 0, 1);
+          let finalL = T.MathUtils.clamp(hsl.l + lightShift, 0, 1);
+
+          // Ensure the trunk is never too dark to see on dark themes
+          if (isDarkTheme && isTrunk && finalL < 0.25) {
+            finalL = 0.25;
+          }
+
+          color.setHSL(hsl.h, hsl.s, finalL);
+          return { r: color.r, g: color.g, b: color.b };
+        };
+
+        const pData = {
+          trunk: theme.trunk.map(hex => shiftRGB(hex, true)),
+          inner: theme.inner.map(hex => shiftRGB(hex, false)),
+          mid: theme.mid.map(hex => shiftRGB(hex, false)),
+          outer: theme.outer.map(hex => shiftRGB(hex, false)),
+        };
+
+        // ── Scene / Camera / Renderer ──
+        const scene = new T.Scene();
+        const W = mount.clientWidth, H = mount.clientHeight;
+        const camera = new T.PerspectiveCamera(45, W / H, 0.1, 100);
+        camera.position.set(0, 5, 24);
+        camera.lookAt(0, 7, 0);
+
+        const renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(W, H);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        mount.appendChild(renderer.domElement);
+
+        // ── Particle material ──
+        const cCv = document.createElement('canvas');
+        cCv.width = cCv.height = 64;
+        const cCtx = cCv.getContext('2d');
+        cCtx.beginPath(); cCtx.arc(32, 32, 30, 0, Math.PI * 2);
+        cCtx.fillStyle = '#fff'; cCtx.fill();
+        const circleTex = new T.CanvasTexture(cCv);
+
+        const baseSize = 0.11 * (theme.dotSize ?? 1.0);
+        const mat = new T.PointsMaterial({
+          size: baseSize, vertexColors: true, map: circleTex,
+          alphaTest: 0.5, transparent: true,
+          blending: T.NormalBlending,
+          depthWrite: !isDarkTheme,
+        });
+
+        let shaderUniforms = null;
+        mat.onBeforeCompile = shader => {
+          shader.uniforms.uTime = { value: 0 };
+          shader.uniforms.uPlantTime = { value: 0 };
+          shader.uniforms.uWind = { value: theme.wind ?? 1.0 };
+          shaderUniforms = shader.uniforms;
+          shader.vertexShader = `
+            attribute float aSizeMultiplier;
+            attribute float aBirthTime;
+            attribute float aType;
+            uniform float uTime;
+            uniform float uPlantTime;
+            uniform float uWind;
+            ${shader.vertexShader}
+          `.replace('gl_PointSize = size;', `
+            float age = max(0.0, uPlantTime - aBirthTime);
+            float growthScale = clamp(age * 1.5, 0.0, 1.0);
+            float bounce = (aType > 0.5) ? sin(clamp(age*4.0,0.0,3.14159))*0.2 : 0.0;
+            float finalSize = size * aSizeMultiplier * (growthScale + bounce);
+            if (age <= 0.0) finalSize = 0.0;
+            gl_PointSize = finalSize;
+          `).replace('#include <begin_vertex>', `
+            #include <begin_vertex>
+            float swayAmt = position.y * 0.04 * uWind;
+            float waveX = sin(position.y*0.4 + position.z*0.3 + uTime*1.2);
+            float waveZ = cos(position.y*0.4 + position.x*0.3 + uTime*1.5);
+            float flutter = (aType > 0.5) ? sin(position.x*5.0+position.z*5.0+uTime*3.5)*0.02*max(0.0,position.y-1.0)*uWind : 0.0;
+            transformed.x += waveX * swayAmt + flutter;
+            transformed.z += waveZ * swayAmt + flutter;
+          `);
+        };
+
+        // ── Tree params (Procedurally scaled) ──
+        const oDepth = theme.depth ?? 6,
+          oGirth = theme.girth ?? 1.0,
+          oCurve = theme.curve ?? 1.0,
+          oSpread = theme.spread ?? 1.0,
+          oDensity = theme.density ?? 1.0;
+
+        const DEPTH = Math.floor(rand() * 4) + 4; // 4 to 7 layers
+        const GIRTH = oGirth * (rand() * 0.8 + 0.6); // 0.6x to 1.4x theme default
+        const CURVE = oCurve * (rand() * 1.5 + 0.5); // 0.5x to 2.0x
+        const SPREAD = oSpread * (rand() * 1.5 + 0.3); // 0.3x to 1.8x
+        const FOLIAGE = rand() * 1.0 + 0.6; // 0.6x to 1.6x
+        const DENSITY = oDensity * (rand() * 1.0 + 0.5); // 0.5x to 1.5x
+
+        // ── Generation state ──
+        let generatedData = [], totalPoints = 0,
+          maxPlantTime = 1, currentPlantTime = 0,
+          drawCount = 0, pointsMesh = null;
+
+        const up = new T.Vector3(0, 1, 0);
+
+        function buildCluster(center, radius, timeOffset) {
+          const num = Math.floor(radius * 2000 * DENSITY);
+          for (let i = 0; i < num; i++) {
+            const u = rand(), v = rand();
+            const theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1);
+            const r = radius * Math.cbrt(rand());
+            const p = new T.Vector3(
+              r * Math.sin(phi) * Math.cos(theta),
+              r * Math.sin(phi) * Math.sin(theta) * 0.75,
+              r * Math.cos(phi)
+            ).add(center);
+            const bucket = r > radius * 0.7 ? pData.outer
+              : r > radius * 0.35 ? pData.mid : pData.inner;
+            const color = bucket[Math.floor(rand() * bucket.length)];
+            generatedData.push({
+              x: p.x, y: p.y, z: p.z, r: color,
+              time: timeOffset + (r / radius) * 10 + rand() * 2,
+              size: rand() * 0.4 + 0.25, type: 1.0
+            });
+          }
+        }
+
+        function buildBranch(startPos, direction, length, depth, timeOffset, twistAngle) {
+          if (depth === 0) {
+            buildCluster(startPos, length * 0.5 * FOLIAGE, timeOffset + 2);
+            return;
+          }
+          const endPos = new T.Vector3().copy(direction).multiplyScalar(length).add(startPos);
+          const outward = new T.Vector3().crossVectors(direction, up).normalize();
+          if (outward.lengthSq() < 0.001) outward.set(1, 0, 0);
+          outward.applyAxisAngle(direction, twistAngle);
+          const midPoint = new T.Vector3().lerpVectors(startPos, endPos, 0.5);
+
+          // The base trunk should grow straight out of the ground organically, not tilted
+          const actCurve = depth === DEPTH ? (CURVE * 0.1) : CURVE;
+          const controlPos = midPoint.add(outward.clone().multiplyScalar(length * 0.2 * actCurve));
+          const curve = new T.QuadraticBezierCurve3(startPos, controlPos, endPos);
+
+          const numDots = Math.floor(length * 400 * DENSITY);
+          const timeToH = length * 8;
+          const baseR = ((depth * 0.04) + 0.02) * GIRTH;
+          const tipR = (((depth - 1) * 0.04) + 0.02) * GIRTH;
+
+          for (let i = 0; i < numDots; i++) {
+            const t = i / numDots;
+            const point = curve.getPoint(t);
+            const tangent = curve.getTangent(t);
+            const rad = T.MathUtils.lerp(baseR, tipR, t)
+              * (depth === DEPTH && t < 0.15 ? 1.0 + (0.15 - t) * 8.0 : 1.0); // Flare out roots more aggressively at the very base
+
+            let a1 = new T.Vector3().crossVectors(tangent, up).normalize();
+            if (a1.lengthSq() < 0.001) a1.set(1, 0, 0);
+            const a2 = new T.Vector3().crossVectors(tangent, a1).normalize();
+
+            const angle = rand() * Math.PI * 2;
+            const radP = Math.sqrt(rand());
+            const p = point.clone()
+              .add(a1.clone().multiplyScalar(Math.cos(angle) * rad * radP))
+              .add(a2.clone().multiplyScalar(Math.sin(angle) * rad * radP));
+
+            generatedData.push({
+              x: p.x, y: p.y, z: p.z,
+              r: pData.trunk[Math.floor(rand() * pData.trunk.length)],
+              time: timeOffset + t * timeToH + radP * length * 10,
+              size: rand() * 0.5 + 0.45, type: 0.0,
+            });
+          }
+
+          const nextTime = timeOffset + timeToH;
+          const mainDir = direction.clone().lerp(up, 0.2).normalize();
+          buildBranch(endPos, mainDir, length * 0.85, depth - 1, nextTime, twistAngle + 2.4);
+
+          const numLats = depth > 2 ? 2 : 1;
+          for (let i = 0; i < numLats; i++) {
+            const splitT = 0.4 + i * 0.35;
+            if (splitT >= 1.0) continue;
+            const splitP = curve.getPoint(splitT);
+            const splitTgt = curve.getTangent(splitT);
+            const twist = twistAngle + 2.4 + i * Math.PI;
+            const lOut = new T.Vector3().crossVectors(splitTgt, up).normalize();
+            if (lOut.lengthSq() < 0.001) lOut.set(1, 0, 0);
+            lOut.applyAxisAngle(splitTgt, twist);
+            const lDir = splitTgt.clone().lerp(lOut, 0.4 * SPREAD).normalize();
+            buildBranch(splitP, lDir, length * 0.65, depth - 1,
+              timeOffset + splitT * timeToH, twist);
+          }
+        }
+
+        function buildGround() {
+          const isForest = sceneType === "forest";
+          const num = Math.floor((isForest ? 20000 : 7000) * DENSITY);
+          for (let i = 0; i < num; i++) {
+            const rad = isForest ? 28 : 10;
+            const r2 = rad * Math.sqrt(rand()), t2 = rand() * Math.PI * 2;
+            // Density falloff
+            if (rand() > Math.pow(r2 / rad, 1.2)) {
+              generatedData.push({
+                x: r2 * Math.cos(t2), y: (rand() - 0.5) * 0.1,
+                z: r2 * Math.sin(t2), r: pData.trunk[0],
+                time: rand() * 5, size: rand() * 0.5 + 0.3, type: 0.0
+              });
+            }
+          }
+        }
+
+        function buildGeometry() {
+          if (pointsMesh) { scene.remove(pointsMesh); pointsMesh.geometry.dispose(); }
+          currentPlantTime = 0; drawCount = 0;
+          
+          const cacheKey = `${exerciseKey}_${sceneType}`;
+          let cached = _treeGenCache[cacheKey];
+
+          if (!cached) {
+            generatedData = [];
+            buildGround();
+          
+            if (sceneType === "forest") {
+               // Main center hero tree
+             buildBranch(new T.Vector3(0, 0, -2), new T.Vector3(0, 1, 0), 4.0 * (rand()*0.2 + 0.9), DEPTH, 4, 0);
+             
+             // 360-Degree Background Forest Ring
+             const forestTrees = [
+               // Front-ish / mid-ground
+               {x: -7, z: -8, s: 3.2, d: 1},
+               {x: 8, z: -6, s: 3.4, d: 1},
+               // Deep back (behind main tree)
+               {x: -14, z: -14, s: 2.6, d: 2},
+               {x: 15, z: -12, s: 2.8, d: 2},
+               {x: 0, z: -18, s: 2.7, d: 2},
+               // Sides
+               {x: -18, z: -2, s: 2.4, d: 2},
+               {x: 18, z: 2, s: 2.5, d: 2},
+               // Camera-side / foreground (as the camera rotates 180 degrees)
+               {x: -12, z: 6, s: 3.0, d: 2},
+               {x: 10, z: 8, s: 2.9, d: 2},
+               {x: -4, z: 12, s: 3.3, d: 1},
+               {x: 5, z: 14, s: 3.1, d: 2},
+               {x: 0, z: 18, s: 2.6, d: 2}
+             ];
+
+             forestTrees.forEach(t => {
+               // Scale and delay background trees slightly
+               buildBranch(
+                 new T.Vector3(t.x, 0, t.z), 
+                 new T.Vector3(0, 1, 0), 
+                 t.s * (rand()*0.3 + 0.8), 
+                 Math.max(1, DEPTH - t.d), 
+                 5 + rand() * 3, 
+                 rand() * 6
+               );
+             });
+          } else {
+             buildBranch(new T.Vector3(0, 0, 0), new T.Vector3(0, 1, 0), 3.5, DEPTH, 4, 0);
+          }
+
+            generatedData.sort((a, b) => a.time - b.time);
+            const tPoints = generatedData.length;
+            const mTime = generatedData[tPoints - 1]?.time || 100;
+
+            const pos = new Float32Array(tPoints * 3);
+            const col = new Float32Array(tPoints * 3);
+            const siz = new Float32Array(tPoints);
+            const bir = new Float32Array(tPoints);
+            const typ = new Float32Array(tPoints);
+            for (let i = 0; i < tPoints; i++) {
+              const d = generatedData[i];
+              pos[i * 3] = d.x; pos[i * 3 + 1] = d.y; pos[i * 3 + 2] = d.z;
+              col[i * 3] = d.r.r; col[i * 3 + 1] = d.r.g; col[i * 3 + 2] = d.r.b;
+              siz[i] = d.size; bir[i] = d.time; typ[i] = d.type;
+            }
+            cached = { pos, col, siz, bir, typ, tPoints, mTime, data: generatedData };
+            _treeGenCache[cacheKey] = cached;
+          }
+
+          totalPoints = cached.tPoints;
+          maxPlantTime = cached.mTime;
+          generatedData = cached.data;
+          
+          const geo = new T.BufferGeometry();
+          geo.setAttribute('position', new T.BufferAttribute(new Float32Array(cached.pos), 3));
+          geo.setAttribute('color', new T.BufferAttribute(new Float32Array(cached.col), 3));
+          geo.setAttribute('aSizeMultiplier', new T.BufferAttribute(new Float32Array(cached.siz), 1));
+          geo.setAttribute('aBirthTime', new T.BufferAttribute(new Float32Array(cached.bir), 1));
+          geo.setAttribute('aType', new T.BufferAttribute(new Float32Array(cached.typ), 1));
+          geo.setDrawRange(0, 0);
+          pointsMesh = new T.Points(geo, mat);
+          scene.add(pointsMesh);
+        }
+
+          buildGeometry();
+
+        // Jump to fully-grown state if needed (rest screen)
+        if (startCompletedRef.current) {
+          currentPlantTime = maxPlantTime + 200;
+          drawCount = totalPoints;
+          pointsMesh.geometry.setDrawRange(0, totalPoints);
+        }
+
+        // ── Atmosphere & Fauna ──
+        const extrasGroup = new T.Group();
+        scene.add(extrasGroup);
+        const birds = [];
+
+        if (isDarkTheme) {
+          // 3D Stars in night/dusk
+          const starGeo = new T.BufferGeometry();
+          const starPos = [];
+          for (let i = 0; i < 400; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(Math.random() * 2 - 1);
+            const r = 30 + Math.random() * 20;
+            // Only upper hemisphere
+            if (r * Math.cos(phi) > -5) {
+                starPos.push(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+            }
+          }
+          starGeo.setAttribute('position', new T.Float32BufferAttribute(starPos, 3));
+          const starMat = new T.PointsMaterial({color: 0xffffff, size: 0.15, transparent: true, opacity: 0.8});
+          extrasGroup.add(new T.Points(starGeo, starMat));
+        } else if (sceneType === "forest") {
+          // Birds in the daytime sky
+          const birdMat = new T.LineBasicMaterial({color: new T.Color(theme.trunk[0]), transparent: true, opacity: 0.4});
+          for (let i = 0; i < 9; i++) {
+            const birdGeo = new T.BufferGeometry();
+            birdGeo.setAttribute('position', new T.Float32BufferAttribute([
+              -0.3, 0.1, -0.2,  
+              0, 0, 0,  
+              0.3, 0.1, -0.2
+            ], 3));
+            const bird = new T.Line(birdGeo, birdMat);
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 5 + Math.random() * 20;
+            const h = 18 + Math.random() * 8;
+            bird.position.set(Math.cos(angle)*dist, h, Math.sin(angle)*dist);
+            bird.rotation.y = -angle + Math.PI/2 + (Math.random() - 0.5); 
+            birds.push({ 
+                mesh: bird, 
+                angle: -bird.rotation.y, 
+                speed: 0.04 + Math.random() * 0.03, 
+                flapSpeed: 12 + Math.random()*6, 
+                baseY: h 
+            });
+            extrasGroup.add(bird);
+          }
+        }
+
+        // ── Animation loop ──
+        let rafId;
+        const clock = new T.Clock();
+        function animate() {
+          rafId = requestAnimationFrame(animate);
+          const dt = clock.getDelta();
+          if (shaderUniforms) {
+            shaderUniforms.uTime.value = clock.elapsedTime;
+            shaderUniforms.uPlantTime.value = currentPlantTime;
+          }
+          
+          // 360 Rotation
+          scene.rotation.y += 0.0025;
+
+          // Animate growing tree
+          if (!startCompletedRef.current && growRef.current && currentPlantTime <= maxPlantTime + 1) {
+            currentPlantTime += dt * (maxPlantTime / durationRef.current);
+            while (drawCount < totalPoints && generatedData[drawCount].time <= currentPlantTime)
+              drawCount++;
+            pointsMesh.geometry.setDrawRange(0, drawCount);
+          }
+
+          // Animate living fauna
+          if (birds.length > 0) {
+            birds.forEach((b, i) => {
+              b.mesh.position.x += Math.cos(b.angle) * b.speed;
+              b.mesh.position.z += Math.sin(b.angle) * b.speed;
+              b.mesh.position.y = b.baseY + Math.sin(clock.elapsedTime * 2 + i) * 0.5;
+              b.mesh.scale.y = Math.sin(clock.elapsedTime * b.flapSpeed) * 0.6 + 0.4;
+              
+              if (b.mesh.position.x > 35 || b.mesh.position.x < -35 || b.mesh.position.z > 35 || b.mesh.position.z < -35) {
+                b.mesh.position.x -= Math.cos(b.angle) * 70;
+                b.mesh.position.z -= Math.sin(b.angle) * 70;
+              }
+            });
+          }
+
+          renderer.render(scene, camera);
+        }
+        animate();
+
+        const onResize = () => {
+          const w = mount.clientWidth, h = mount.clientHeight;
+          camera.aspect = w / h; camera.updateProjectionMatrix();
+          renderer.setSize(w, h);
+        };
+        window.addEventListener('resize', onResize);
+
+        return () => {
+          cancelAnimationFrame(rafId);
+          window.removeEventListener('resize', onResize);
+          if (pointsMesh) pointsMesh.geometry.dispose();
+          mat.dispose(); circleTex.dispose(); renderer.dispose();
+          if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+        };
+      }, [exerciseKey, themeIndex]);
+
+      return <div ref={mountRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />;
+    }
+
+    const font = "'DM Sans', -apple-system, 'Segoe UI', sans-serif";
+    const display = "'Bricolage Grotesque', -apple-system, 'Segoe UI', sans-serif";
+    const serif = "'DM Sans', sans-serif";
+
+    // ─── STORAGE ───────────────────────────────────────────────────────
+    const STORAGE_KEY = "workout-plans";
+    const STREAK_KEY = "workout-streak";
+    function loadPlans() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+    function savePlans(plans) { localStorage.setItem(STORAGE_KEY, JSON.stringify(plans)); }
+    function addPlan(plan) {
+      const plans = loadPlans();
+      plan._importedAt = Date.now();
+      plan._id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      plans.unshift(plan);
+      savePlans(plans);
+      return plans;
+    }
+    function removePlan(id) { const plans = loadPlans().filter(p => p._id !== id); savePlans(plans); return plans; }
+
+    // Streak tracking (behavioral: fresh start + commitment)
+    function getStreak() {
+      try {
+        const data = JSON.parse(localStorage.getItem(STREAK_KEY)) || { count: 0, lastDate: null };
+        const t = new Date(); const y = new Date(t); y.setDate(y.getDate() - 1);
+        const today = t.toDateString(); const yesterday = y.toDateString();
+        if (data.lastDate === today) return data.count;
+        if (data.lastDate === yesterday) return data.count; // still valid
+        return 0; // streak broken
+      } catch { return 0; }
+    }
+    function incrementStreak() {
+      try {
+        const data = JSON.parse(localStorage.getItem(STREAK_KEY)) || { count: 0, lastDate: null };
+        const t = new Date(); const y = new Date(t); y.setDate(y.getDate() - 1);
+        const today = t.toDateString(); const yesterday = y.toDateString();
+        if (data.lastDate === today) return data.count;
+        const newCount = data.lastDate === yesterday ? data.count + 1 : 1;
+        localStorage.setItem(STREAK_KEY, JSON.stringify({ count: newCount, lastDate: today }));
+        return newCount;
+      } catch { return 1; }
+    }
+
+    function parsePlanJS(text) {
+      const match = text.match(/const\s+PLAN\s*=\s*(\{[\s\S]*\});?\s*$/m);
+      if (!match) throw new Error("Could not find PLAN object");
+      const plan = new Function("return " + match[1])();
+      if (!plan.steps || !Array.isArray(plan.steps)) throw new Error("Invalid plan: missing steps");
+      return plan;
+    }
+
+    // ─── PROFILE & AI ──────────────────────────────────────────────────
+    const PROFILE_KEY = "grove-user-profile";
+    const API_KEY_KEY = "anthropic-api-key";
+
+    const DEFAULT_YOGA_PLAN = {
+      title: "Morning Flow",
+      subtitle: "A gentle yoga sequence to start your day",
+      steps: [
+        { name: "Child's Pose",        emoji: "🙏", duration: 60, sets: 1, restBetweenSets: 0,  meta: "60 sec",           cue: "Kneel, sit back on heels, arms forward, forehead down. Breathe into your lower back.",                      why: "Releases tension in the hips and lower back, calms the nervous system." },
+        { name: "Cat-Cow",             emoji: "🐱", duration: 45, sets: 2, restBetweenSets: 15, meta: "45 sec × 2",       cue: "On all fours. Inhale: drop belly, lift gaze (Cow). Exhale: round spine, tuck chin (Cat).",                  why: "Warms up the spine and coordinates movement with breath." },
+        { name: "Downward Dog",        emoji: "🐕", duration: 45, sets: 2, restBetweenSets: 15, meta: "45 sec × 2",       cue: "Hips up and back, heels pressing toward floor, arms straight. Pedal feet slowly.",                          why: "Lengthens the hamstrings and calves while building shoulder strength." },
+        { name: "Low Lunge",           emoji: "🦵", duration: 45, sets: 2, restBetweenSets: 15, meta: "45 sec each side", cue: "Step right foot forward, back knee down. Sink hips, reach arms up. Switch sides each set.",                  why: "Opens the hip flexors — often tight from sitting." },
+        { name: "Warrior II",          emoji: "⚔️", duration: 45, sets: 2, restBetweenSets: 15, meta: "45 sec × 2",       cue: "Front knee over ankle, back foot parallel. Arms wide, gaze over front hand. Hold strong.",                   why: "Builds lower body strength and trains lateral stability." },
+        { name: "Triangle Pose",       emoji: "🔺", duration: 45, sets: 2, restBetweenSets: 15, meta: "45 sec × 2",       cue: "Legs wide, front foot forward. Reach arm down to shin, other arm up. Open the chest.",                       why: "Stretches the side body and hamstrings while opening the chest." },
+        { name: "Seated Forward Fold", emoji: "🧘", duration: 60, sets: 1, restBetweenSets: 0,  meta: "60 sec",           cue: "Legs straight, hinge from hips. Reach toward feet, soften the knees if needed.",                            why: "Calms the mind and deeply stretches the hamstrings and lower back." },
+        { name: "Supine Twist",        emoji: "🌀", duration: 45, sets: 2, restBetweenSets: 10, meta: "45 sec each side", cue: "On your back, draw right knee to chest, guide it across to the left. Arms out. Switch each set.",            why: "Releases tension in the spine and massages the internal organs." },
+        { name: "Savasana",            emoji: "✨", duration: 90, sets: 1, restBetweenSets: 0,  meta: "90 sec",           cue: "Lie flat, arms slightly out, palms up. Let everything go. Just breathe.",                                    why: "Allows the nervous system to integrate the full benefits of the practice." },
+      ],
+    };
+
+    function loadProfile() { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; } catch { return null; } }
+    function saveProfile(p) { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }
+    function loadApiKey() { return localStorage.getItem(API_KEY_KEY) || ""; }
+    function saveApiKey(k) { localStorage.setItem(API_KEY_KEY, k); }
+
+    function buildSystemPrompt(profile) {
+      const name = profile?.name ? profile.name : "the user";
+      const goals = profile?.goals || "general fitness";
+      const restrictions = profile?.restrictions || "none";
+      const experience = profile?.experience || "intermediate";
+      const diet = profile?.diet || "not specified";
+      const notes = profile?.notes || "";
+      return `You are a personal fitness AI helping ${name} create workout routines tailored to their specific needs.
+
+User profile:
+- Goals: ${goals}
+- Restrictions / physical issues: ${restrictions}
+- Experience level: ${experience}
+- Diet: ${diet}${notes ? `\n- Notes: ${notes}` : ""}
+
+Always account for their restrictions, respect their experience level, and connect exercises back to their goals.
+
+When creating a routine, write 1–2 conversational sentences then include a \`\`\`json code block with a valid PLAN in this exact shape:
+
+{
+  "title": "Routine Name",
+  "subtitle": "One-line description",
+  "steps": [
+    {
+      "name": "Exercise Name",
+      "emoji": "🧘",
+      "duration": 45,
+      "sets": 2,
+      "restBetweenSets": 15,
+      "meta": "45 sec × 2",
+      "cue": "What to do and feel during this exercise.",
+      "why": "Why this exercise matters for the user's goals."
+    }
+  ]
+}
+
+For refinements, return the complete updated PLAN. For questions or clarifications, just respond conversationally without a JSON block.`;
+    }
+
+    function extractPlan(text) {
+      const m = text.match(/```json\s*([\s\S]*?)```/);
+      if (!m) return null;
+      try {
+        const plan = JSON.parse(m[1].trim());
+        if (!plan.title || !Array.isArray(plan.steps) || plan.steps.length === 0) return null;
+        return plan;
+      } catch { return null; }
+    }
+
+    // ─── LOG TO NOTION ─────────────────────────────────────────────────
+    async function logWorkout(plan) {
+      if (!WEBHOOK_URL) return null;
+      const payload = {
+        title: plan.title || "Workout",
+        subtitle: plan.subtitle || "",
+        totalMinutes: plan.totalMinutes || Math.round(plan.steps.reduce((a, s) => a + s.duration * s.sets + s.restBetweenSets * Math.max(0, s.sets - 1), 0) / 60),
+        exercises: plan.steps.length,
+        date: new Date().toISOString(),
+        subjectId: plan.subjectId || "",
+      };
+      try {
+        const res = await fetch(WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        return data.notionPageId || null;
+      } catch { return null; }
+    }
+
+    async function saveSessionNotes({ notionPageId, feel, posture, pain }) {
+      if (!WEBHOOK_NOTES_URL || !notionPageId) return;
+      try { await fetch(WEBHOOK_NOTES_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notionPageId, feel, posture, pain: pain || "", exerciseNotes: "" }) }); } catch { }
+    }
+
+    // ─── AUDIO ──────────────────────────────────────────────────────────
+    function makeAudio() {
+      let ctx = null;
+      let globalVol = 0.5;
+      const ac = () => { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; };
+      const t = (freq, type, dur, vol = 0.2, delay = 0) => {
+        try { 
+          const c = ac(), o = c.createOscillator(), g = c.createGain(); 
+          o.connect(g); g.connect(c.destination); o.type = type; o.frequency.value = freq; 
+          const finalVol = vol * globalVol;
+          g.gain.setValueAtTime(0, c.currentTime + delay); 
+          g.gain.linearRampToValueAtTime(finalVol, c.currentTime + delay + 0.01); 
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + dur); 
+          o.start(c.currentTime + delay); o.stop(c.currentTime + delay + dur + 0.05); 
+        } catch { }
+      };
+      return {
+        setVolume: (v) => { globalVol = v; },
+        getVolume: () => globalVol,
+        init: () => {
+          try {
+            const c = ac();
+            const o = c.createOscillator();
+            const g = c.createGain();
+            o.connect(g);
+            g.connect(c.destination);
+            g.gain.value = 0;
+            o.start(c.currentTime);
+            o.stop(c.currentTime + 0.01);
+          } catch(e) {}
+        },
+        tick: () => t(880, "sine", 0.06, 0.08),
+        beep: () => t(660, "sine", 0.07, 0.1),
+        ready: () => { t(523, "sine", 0.1, 0.15, 0); t(659, "sine", 0.1, 0.15, 0.14); },
+        setDone: () => { t(523, "triangle", 0.22, 0.2, 0); t(659, "triangle", 0.22, 0.17, 0.06); t(784, "triangle", 0.22, 0.14, 0.12); },
+        exDone: () => { t(523, "sine", 0.32, 0.22, 0); t(659, "sine", 0.32, 0.18, 0.07); t(784, "sine", 0.32, 0.15, 0.14); t(1046, "sine", 0.38, 0.1, 0.22); },
+        allDone: () => [523, 659, 784, 1046, 1318].forEach((f, i) => t(f, "sine", 0.4, 0.16, i * 0.1)),
+      };
+    }
+    const sfxEngine = makeAudio();
+
+    // ─── HAPTIC FEEDBACK ──────────────────────────────────────────────
+    const haptic = (v) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(v); };
+
+    // ─── WAKE LOCK UTILITY ─────────────────────────────────────────────
+    let wakeLockObj = null;
+    const requestWakeLock = async () => {
+      try { if ('wakeLock' in navigator && !wakeLockObj) wakeLockObj = await navigator.wakeLock.request('screen'); } catch (err) {}
+    };
+    const releaseWakeLock = () => {
+      if (wakeLockObj) { wakeLockObj.release(); wakeLockObj = null; }
+    };
+
+    // ─── SPRING PHYSICS ─────────────────────────────────────────────────
+    function useSpring(target, k = 700, d = 70) {
+      const [v, setV] = useState(target);
+      const s = useRef({ x: target, v: 0 }); const r = useRef(null);
+      useEffect(() => {
+        const tick = () => { const { x, v } = s.current; const nv = (v + (target - x) * k / 10000) * (1 - d / 1000); const nx = x + nv; s.current = { x: nx, v: nv }; setV(nx); if (Math.abs(target - nx) > 0.0005 || Math.abs(nv) > 0.0005) r.current = requestAnimationFrame(tick); else { s.current = { x: target, v: 0 }; setV(target); } };
+        r.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(r.current);
+      }, [target]); return v;
+    }
+
+    // ─── M3E SHAPE SYSTEM ────────────────────────────────────────────────
+
+    function m3ePoints(name, n = 128) {
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const theta = (i / n) * Math.PI * 2;
+        let r = 1;
+        if (name === "diamond") {
+          const ct = Math.abs(Math.cos(theta)), st = Math.abs(Math.sin(theta));
+          r = (1 / Math.max(ct + st, 0.001)) / Math.SQRT2;
+        } else if (name === "gem") {
+          const ct = Math.pow(Math.abs(Math.cos(theta)), 2 / 3);
+          const st = Math.pow(Math.abs(Math.sin(theta)), 2 / 3);
+          r = (1 / Math.max(Math.pow(ct + st, 3 / 2), 0.001)) * 0.92;
+        } else if (name === "cookie") {
+          const ct = Math.sqrt(Math.abs(Math.cos(theta)));
+          const st = Math.sqrt(Math.abs(Math.sin(theta)));
+          r = (1 / Math.max(ct + st, 0.001)) * 0.88;
+        } else if (name === "flower") {
+          r = 0.55 + 0.45 * Math.abs(Math.cos(3 * theta));
+        } else if (name === "daisy") {
+          r = 0.6 + 0.4 * Math.abs(Math.cos(5 * theta));
+        }
+        pts.push({ x: Math.cos(theta) * r, y: Math.sin(theta) * r });
+      }
+      return pts;
+    }
+
+    const M3E_SHAPES = {};
+    SHAPE_NAMES.forEach(n => { M3E_SHAPES[n] = m3ePoints(n, 128); });
+
+    function lerpPoints(a, b, t) {
+      return a.map((p, i) => ({ x: p.x + (b[i].x - p.x) * t, y: p.y + (b[i].y - p.y) * t }));
+    }
+
+    function drawM3EPath(ctx, pts, cx, cy, r) {
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const px = cx + p.x * r, py = cy + p.y * r;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+    }
+
+    function useMorphedShape(fromName, toName) {
+      const [morphT, setMorphT] = useState(0);
+      const sRef = useRef({ x: 0, v: 0 });
+      const rafRef = useRef(null);
+      useEffect(() => {
+        sRef.current = { x: 0, v: 0 };
+        setMorphT(0);
+        const tick = () => {
+          const s = sRef.current;
+          const nv = (s.v + (1 - s.x) * 300 / 10000) * (1 - 12 / 1000);
+          const nx = s.x + nv;
+          sRef.current = { x: nx, v: nv };
+          setMorphT(nx);
+          if (Math.abs(1 - nx) > 0.001 || Math.abs(nv) > 0.001) {
+            rafRef.current = requestAnimationFrame(tick);
+          } else { sRef.current = { x: 1, v: 0 }; setMorphT(1); }
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(rafRef.current);
+      }, [toName]);
+      const fromPts = M3E_SHAPES[fromName] || M3E_SHAPES["cookie"];
+      const toPts = M3E_SHAPES[toName] || M3E_SHAPES["cookie"];
+      return lerpPoints(fromPts, toPts, morphT);
+    }
+
+    function useParticleBurst() {
+      const [particles, setParticles] = useState([]);
+      const triggerBurst = useCallback((color) => {
+        const p = Array.from({ length: 20 }, (_, i) => {
+          const angle = (i / 20) * Math.PI * 2 + Math.random() * 0.3;
+          const speed = 80 + Math.random() * 120;
+          return { id: Date.now() + i, color, dx: Math.cos(angle) * speed, dy: Math.sin(angle) * speed, size: 6 + Math.random() * 8, duration: 0.5 + Math.random() * 0.4, delay: Math.random() * 0.1 };
+        });
+        setParticles(p);
+        setTimeout(() => setParticles([]), 1200);
+      }, []);
+      return [particles, triggerBurst];
+    }
+
+    // ─── HELPERS ────────────────────────────────────────────────────────
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    const fmtMins = (s) => { const m = Math.floor(s / 60); return m < 1 ? "<1 min" : `${m} min`; };
+    const rootStyle = { minHeight: "100vh", background: C.bg, fontFamily: font, color: C.onBg, display: "flex", flexDirection: "column", position: "relative", overscrollBehavior: "none" };
+
+    function calcTotalSecs(steps) { return steps.reduce((a, s) => a + s.duration * s.sets + s.restBetweenSets * Math.max(0, s.sets - 1), 0); }
+
+    // ─── COMPONENTS ─────────────────────────────────────────────────────
+
+    // Full-viewport M3E morphing shape backdrop
+    function M3EBackdrop({ shapeName: toName, color, pulseKey }) {
+      const canvasRef = useRef(null);
+      const prevName = useRef(toName);
+      const morphedPts = useMorphedShape(prevName.current, toName);
+      useEffect(() => { prevName.current = toName; }, [toName]);
+
+      const [pulseScale, setPulseScale] = useState(1.0);
+      const pulseSpring = useSpring(pulseScale, 600, 60);
+      useEffect(() => {
+        setPulseScale(1.02);
+        const t = setTimeout(() => setPulseScale(1.0), 80);
+        return () => clearTimeout(t);
+      }, [pulseKey]);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        const resize = () => {
+          canvas.width = window.innerWidth * dpr;
+          canvas.height = window.innerHeight * dpr;
+          canvas.style.width = window.innerWidth + "px";
+          canvas.style.height = window.innerHeight + "px";
+        };
+        resize();
+        window.addEventListener("resize", resize);
+        return () => window.removeEventListener("resize", resize);
+      }, []);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        const ctx = canvas.getContext("2d");
+        const w = canvas.width / dpr;
+        const h = canvas.height / dpr;
+        ctx.save(); ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+        const r = Math.min(w, h) * 0.40 * pulseSpring;
+        drawM3EPath(ctx, morphedPts, w / 2, h / 2, r);
+        ctx.fillStyle = color + "26"; // ~15% opacity
+        ctx.fill();
+        ctx.restore();
+      }, [morphedPts, color, pulseSpring]);
+
+      return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }} />;
+    }
+
+    // Radial particle burst (set completion)
+    function ParticleBurstLayer({ particles }) {
+      if (!particles.length) return null;
+      return (
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 5, overflow: "hidden" }}>
+          {particles.map(p => (
+            <div key={p.id} style={{
+              position: "absolute", left: "50%", top: "50%",
+              width: p.size, height: p.size, borderRadius: "50%",
+              background: p.color,
+              "--dx": p.dx + "px", "--dy": p.dy + "px",
+              animation: `particleBurst ${p.duration}s cubic-bezier(0.2, 0, 0, 1) ${p.delay}s both`,
+              transform: "translate(-50%, -50%)",
+            }} />
+          ))}
+        </div>
+      );
+    }
+
+    // Small M3E cookie canvas for chip/card backgrounds
+    function M3EChipCanvas({ width, height, color, opacity = 1, border = "transparent" }) {
+      const canvasRef = useRef(null);
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+        if (opacity <= 0 && (!border || border === "transparent")) return;
+        const pts = M3E_SHAPES["cookie"];
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          const px = width / 2 + p.x * (width / 2 - 2);
+          const py = height / 2 + p.y * (height / 2 - 2);
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        if (opacity > 0) { ctx.globalAlpha = opacity; ctx.fillStyle = color; ctx.fill(); }
+        if (border && border !== "transparent") {
+          ctx.globalAlpha = 1; ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }, [width, height, color, opacity, border]);
+      return <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width, height, pointerEvents: "none" }} />;
+    }
+
+    // Hero CTA button with M3E cookie-shape canvas
+    function M3EPillBtn({ children, onClick, color, textColor = "#FFFFFF", style = {} }) {
+      const [pressed, setPressed] = useState(false);
+      const scale = useSpring(pressed ? 0.95 : 1, 800, 80);
+      const canvasRef = useRef(null);
+      const W = 320, H = 64;
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = W * dpr; canvas.height = H * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+        const pts = M3E_SHAPES["cookie"];
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+          const px = W / 2 + p.x * (W / 2 - 4);
+          const py = H / 2 + p.y * (H / 2 - 4);
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fillStyle = color; ctx.fill();
+      }, [color]);
+      return (
+        <div
+          onPointerDown={() => setPressed(true)}
+          onPointerUp={() => { setPressed(false); onClick?.(); }}
+          onPointerLeave={() => setPressed(false)}
+          style={{ position: "relative", width: W, height: H, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transform: `scale(${scale})`, userSelect: "none", ...style }}
+        >
+          <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: W, height: H }} />
+          <span style={{ position: "relative", zIndex: 1, fontFamily: display, fontSize: 17, fontWeight: 700, color: textColor, letterSpacing: 0.5 }}>{children}</span>
+        </div>
+      );
+    }
+
+    // Decorative M3E shape hint (corner decoration)
+    function IdleShapeHint({ color, shapeName: name }) {
+      const canvasRef = useRef(null);
+      const SIZE = 220;
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = SIZE * dpr; canvas.height = SIZE * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr); ctx.clearRect(0, 0, SIZE, SIZE);
+        const pts = M3E_SHAPES[name] || M3E_SHAPES["cookie"];
+        drawM3EPath(ctx, pts, SIZE / 2, SIZE / 2, SIZE / 2 - 8);
+        ctx.fillStyle = color + "1F"; // ~12% opacity
+        ctx.fill();
+      }, [color, name]);
+      return <canvas ref={canvasRef} style={{ position: "fixed", top: -40, right: -40, width: SIZE, height: SIZE, pointerEvents: "none", zIndex: 0 }} />;
+    }
+
+    // Custom Material Design Dialog
+    function Dialog({ open, title, message, onConfirm, onCancel, confirmLabel = "Confirm", confirmColor = C.primary }) {
+      const scale = useSpring(open ? 1 : 0.92, 1000, 100);
+      const opacity = useSpring(open ? 1 : 0, 1000, 100);
+
+      if (!open && opacity < 0.01) return null;
+
+      return (
+        <div style={{ position: "fixed", inset: 0, zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: open ? "auto" : "none" }}>
+          <div onClick={onCancel} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)", opacity, transition: "opacity 0.25s ease" }} />
+          <div style={{ 
+            position: "relative", zIndex: 1, 
+            background: C.bg, borderRadius: 28, padding: 32, 
+            width: "calc(100% - 48px)", maxWidth: 320,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+            transform: `scale(${scale})`, opacity,
+          }}>
+            <h3 style={{ fontFamily: display, fontSize: 22, fontWeight: 800, color: C.onBg, marginBottom: 12, letterSpacing: -0.5 }}>{title}</h3>
+            <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.5, marginBottom: 28 }}>{message}</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Btn variant="text" onClick={onCancel} style={{ padding: "10px 20px" }}>Cancel</Btn>
+              <Btn onClick={onConfirm} style={{ background: confirmColor, padding: "10px 24px" }}>{confirmLabel}</Btn>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Animated checkmark SVG
+    function AnimatedCheck({ size = 64, color = C.primary, delay = 0 }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" style={{ animation: `scaleIn 0.5s cubic-bezier(0.2, 0, 0, 1) ${delay}s both` }}>
+          <circle cx="24" cy="24" r="22" stroke={color} strokeWidth="1.5" opacity="0.2" />
+          <path d="M14 24.5L21 31.5L34 17.5" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ strokeDasharray: 48, animation: `checkDraw 0.25s ease ${delay + 0.1}s both` }} />
+        </svg>
+      );
+    }
+
+    // Confetti particles (Power of Moments: elevation through sensory delight)
+    function Confetti({ active }) {
+      const [particles, setParticles] = useState([]);
+      useEffect(() => {
+        if (!active) return;
+        const colors = EXERCISE_COLORS;
+        const p = Array.from({ length: 40 }, (_, i) => ({
+          id: i,
+          x: Math.random() * 100,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: 4 + Math.random() * 6,
+          delay: Math.random() * 1.5,
+          duration: 2 + Math.random() * 2,
+          rotate: Math.random() * 360,
+        }));
+        setParticles(p);
+        const timer = setTimeout(() => setParticles([]), 5000);
+        return () => clearTimeout(timer);
+      }, [active]);
+      if (!particles.length) return null;
+      return (
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1000, overflow: "hidden" }}>
+          {particles.map(p => (
+            <div key={p.id} style={{
+              position: "absolute", top: -20, left: `${p.x}%`,
+              width: p.size, height: p.size * 1.4, borderRadius: 1,
+              background: p.color,
+              animation: `confettiDrift ${p.duration}s ease-in ${p.delay}s both`,
+              transform: `rotate(${p.rotate}deg)`,
+            }} />
+          ))}
+        </div>
+      );
+    }
+
+    // Button with spring press
+    function Btn({ children, onClick, variant = "filled", style = {}, disabled = false }) {
+      const [p, setP] = useState(false);
+      const scale = useSpring(p ? 0.96 : 1, 800, 80);
+      const styles = {
+        filled: { bg: C.primary, fg: "#FFFFFF", border: "none" },
+        tonal: { bg: C.surfaceHigh, fg: C.onBg, border: `1px solid ${C.faint}` },
+        text: { bg: "transparent", fg: C.muted, border: "none" },
+        accent: { bg: C.accent, fg: "#1A1400", border: "none" },
+      }[variant];
+      return (
+        <button
+          onPointerDown={() => !disabled && setP(true)}
+          onPointerUp={() => { setP(false); if (!disabled) onClick?.(); }}
+          onPointerLeave={() => setP(false)}
+          disabled={disabled}
+          style={{
+            background: styles.bg, color: styles.fg, border: styles.border,
+            borderRadius: 100, padding: "12px 32px", fontSize: 14, fontWeight: 600,
+            fontFamily: font, cursor: disabled ? "default" : "pointer",
+            letterSpacing: 0.1, transform: `scale(${scale})`,
+            opacity: disabled ? 0.35 : 1, transition: "opacity 0.3s",
+            ...style,
+          }}
+        >{children}</button>
+      );
+    }
+
+    // Tap chip for session notes
+    function TapChip({ label, selected, color, onSelect }) {
+      const [p, setP] = useState(false);
+      const scale = useSpring(p ? 0.96 : 1, 800, 80);
+      const isNeg = color === "bad";
+      const chipColor = isNeg ? C.danger : C.primary;
+      const border = selected ? chipColor : C.faint;
+      const fg = selected ? chipColor : C.muted;
+      const chipW = 148, chipH = 46;
+      return (
+        <div
+          onPointerDown={() => setP(true)}
+          onPointerUp={() => { setP(false); onSelect(); }}
+          onPointerLeave={() => setP(false)}
+          style={{
+            position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: chipW, height: chipH, cursor: "pointer", transform: `scale(${scale})`, userSelect: "none",
+          }}
+        >
+          <M3EChipCanvas width={chipW} height={chipH} color={chipColor} opacity={selected ? 0.12 : 0} border={border} />
+          <span style={{ position: "relative", zIndex: 1, fontSize: 13, fontFamily: font, fontWeight: selected ? 600 : 400, color: fg, pointerEvents: "none" }}>{label}</span>
+        </div>
+      );
+    }
+
+    // Journey bar: shows all exercises as segments (clarity: where am I?)
+    function JourneyBar({ steps, currentIndex, phase, activeColor, onDark, currentTime, totalTime }) {
+      const ac = activeColor || C.primary;
+      const inactiveBg = onDark ? "rgba(255,255,255,0.12)" : C.faint;
+      
+      return (
+        <div style={{ display: "flex", gap: 6, padding: "0 24px", width: "100%", maxWidth: "min(600px, 80vw)" }}>
+          {steps.map((s, i) => {
+            const done = i < currentIndex;
+            const active = i === currentIndex;
+            
+            // Calculate progress for the active segment
+            // We assume currentTime is counting DOWN from totalTime to 0
+            let progress = 0;
+            if (done) progress = 1;
+            else if (active && totalTime > 0) {
+              progress = Math.max(0, Math.min(1, (totalTime - currentTime) / totalTime));
+            }
+
+            return (
+              <div key={i} style={{
+                flex: 1, height: 4, borderRadius: 2, background: inactiveBg,
+                position: "relative", overflow: "hidden"
+              }}>
+                {(done || active) && (
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    background: active && phase === "rest" ? C.rest : ac,
+                    opacity: done ? 0.35 : 1,
+                    transform: `scaleX(${progress})`,
+                    transformOrigin: "left",
+                    transition: active ? "transform 1s linear" : "transform 0.4s ease",
+                    willChange: "transform"
+                  }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Set indicator dots
+    function SetDots({ total, done, color = C.primary, onDark, onSetClick }) {
+      if (total <= 1) return null;
+      const inactiveBg = onDark ? "rgba(255,255,255,0.18)" : C.faint;
+      return (
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {Array.from({ length: total }).map((_, i) => (
+            <button 
+              key={i} 
+              onClick={() => onSetClick && onSetClick(i)}
+              aria-label={`Switch to set ${i + 1}`}
+              style={{
+                width: i === done ? 28 : 10, height: 10, borderRadius: 100,
+                background: i < done ? color : i === done ? color : inactiveBg,
+                opacity: i < done ? 0.35 : 1,
+                border: "none", cursor: onSetClick ? "pointer" : "default",
+                transition: "all 0.2s cubic-bezier(0.2, 0, 0, 1)",
+                padding: 0
+              }} 
+            />
+          ))}
+        </div>
+      );
+    }
+
+    // Micro-copy nudges (behavioral science: variable reward + encouragement)
+    const NUDGES = {
+      start: ["Let's go.", "You've got this.", "Focus up.", "One step at a time."],
+      midway: ["Halfway there.", "Keep pushing.", "Strong.", "You're in the zone."],
+      almostDone: ["Almost there.", "One more push.", "Finish strong.", "Last stretch."],
+      rest: ["Breathe.", "Reset.", "Shake it out.", "Stay loose."],
+      done: ["Solid session.", "That's the work.", "Consistency wins.", "Another one done."],
+    };
+    function getNudge(category) { const arr = NUDGES[category]; return arr[Math.floor(Math.random() * arr.length)]; }
+
+    // ─── SESSION NOTES SCREEN ──────────────────────────────────────────
+    function SessionNotesScreen({ planTitle, onSave, onSkip }) {
+      const [step, setStep] = useState(0);
+      const [feel, setFeel] = useState(null);
+      const [posture, setPosture] = useState(null);
+      const [pain, setPain] = useState(null);
+      const [saving, setSaving] = useState(false);
+
+      const feelOpts = [{ val: "Easy", color: "good", label: "😌 Easy" }, { val: "Good", color: "good", label: "💪 Good" }, { val: "Hard", color: "neutral", label: "🔥 Hard" }, { val: "Exhausting", color: "bad", label: "😮‍💨 Exhausting" }];
+      const postureOpts = [{ val: "No issues noticed", color: "good", label: "✅ No issues" }, { val: "Shoulders stayed back", color: "good", label: "🟢 Shoulders back" }, { val: "Ribs tucked well", color: "good", label: "🟢 Ribs tucked" }, { val: "Shoulders rolled forward", color: "bad", label: "🔴 Shoulders fwd" }, { val: "Ribs flared during sets", color: "bad", label: "🔴 Ribs flared" }];
+      const painOpts = [{ val: "", color: "good", label: "👍 None" }, { val: "Shoulder discomfort", color: "bad", label: "⚠️ Shoulder" }, { val: "Lower back discomfort", color: "bad", label: "⚠️ Lower back" }, { val: "Neck discomfort", color: "bad", label: "⚠️ Neck" }, { val: "Other discomfort", color: "bad", label: "⚠️ Other" }];
+
+      const questions = [
+        { key: "feel", label: "How did it feel?", opts: feelOpts, val: feel, set: (v) => { setFeel(v); setTimeout(() => setStep(1), 300); } },
+        { key: "posture", label: "Posture check", opts: postureOpts, val: posture, set: (v) => { setPosture(v); setTimeout(() => setStep(2), 300); } },
+        { key: "pain", label: "Any discomfort?", opts: painOpts, val: pain, set: (v) => { setPain(v); } },
+      ];
+
+      const ready = feel && posture && pain !== null;
+      const handleSave = async () => { if (!ready) return; setSaving(true); await onSave({ feel, posture, pain }); };
+
+      const tealColor = EXERCISE_COLORS[3];
+
+      if (saving) return (
+        <div style={{ ...rootStyle, alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <AnimatedCheck size={56} color={tealColor} />
+            <p style={{ fontSize: 14, color: C.muted, animation: "fadeIn 0.5s ease 0.4s both" }}>Saving to Notion…</p>
+          </div>
+        </div>
+      );
+
+      const q = questions[step];
+      return (
+        <div style={{ ...rootStyle, overflow: "auto" }}>
+          <div style={{ width: "100%", maxWidth: 420, margin: "0 auto", padding: "56px 24px 96px" }}>
+            {/* Progress dots */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 40 }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{
+                  width: i === step ? 24 : 8, height: 8, borderRadius: 100,
+                  background: i < step ? tealColor : i === step ? tealColor : C.faint,
+                  opacity: i < step ? 0.35 : 1,
+                  transition: "all 0.2s cubic-bezier(0.2, 0, 0, 1)",
+                }} />
+              ))}
+            </div>
+
+            <p style={{ fontFamily: display, fontSize: 11, color: tealColor, letterSpacing: 2, textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>
+              Session notes
+            </p>
+            <h1 style={{ fontFamily: display, fontSize: 32, fontWeight: 800, color: C.onBg, letterSpacing: -1, marginBottom: 8, animation: "fadeUp 0.4s ease both" }} key={step}>
+              {q.label}
+            </h1>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 32 }}>{planTitle}</p>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 40, animation: "fadeUp 0.4s ease 0.1s both" }} key={`chips-${step}`}>
+              {q.opts.map(o => (
+                <TapChip key={o.val} label={o.label} selected={q.val === o.val} color={o.color} onSelect={() => q.set(o.val)} />
+              ))}
+            </div>
+
+            {/* Navigation */}
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              {step > 0 && <Btn variant="text" onClick={() => setStep(step - 1)} style={{ fontSize: 13 }}>← Back</Btn>}
+              <div style={{ flex: 1 }} />
+              {step === 2 && ready && (
+                <M3EPillBtn onClick={handleSave} color={tealColor} style={{ animation: "fadeUp 0.3s ease both" }}>Save notes</M3EPillBtn>
+              )}
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: 32 }}>
+              <Btn variant="text" onClick={onSkip} style={{ fontSize: 12, opacity: 0.6 }}>Skip for now</Btn>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── SCROLL-TO-TOP FAB ─────────────────────────────────────────────
+    function LibScrollToTop() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => {
+        const el = document.getElementById("lib-scroll-root");
+        if (!el) return;
+        const onScroll = () => setVisible(el.scrollTop > 200);
+        el.addEventListener("scroll", onScroll);
+        return () => el.removeEventListener("scroll", onScroll);
+      }, []);
+      const scrollUp = () => {
+        const el = document.getElementById("lib-scroll-root");
+        el?.scrollTo({ top: 0, behavior: "smooth" });
+      };
+      return (
+        <button
+          onClick={scrollUp}
+          aria-label="Scroll to top"
+          style={{
+            position: "absolute", bottom: 28, right: 28, zIndex: 20,
+            width: 44, height: 44, borderRadius: "50%",
+            background: C.onBg, color: "#fff",
+            border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "scale(1) translateY(0)" : "scale(0.8) translateY(8px)",
+            transition: "opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0, 0, 1)",
+            pointerEvents: visible ? "auto" : "none",
+          }}
+        >
+          <span className="material-icons" style={{ fontSize: 20 }}>arrow_upward</span>
+        </button>
+      );
+    }
+
+    // ─── PROFILE SETUP MODAL ───────────────────────────────────────────
+    function ProfileSetupModal({ onSave, onDismiss }) {
+      const existing = loadProfile() || {};
+      const [form, setForm] = useState({
+        name: existing.name || "",
+        goals: existing.goals || "",
+        restrictions: existing.restrictions || "",
+        experience: existing.experience || "intermediate",
+        diet: existing.diet || "",
+        notes: existing.notes || "",
+      });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+      const inputStyle = {
+        width: "100%", background: "rgba(255,255,255,0.7)", border: `1px solid ${C.faint}`,
+        borderRadius: 12, padding: "11px 14px", fontSize: 14, color: C.onBg,
+        fontFamily: font, outline: "none", boxSizing: "border-box", transition: "all 0.2s",
+      };
+      const labelStyle = { fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", display: "block", marginBottom: 7 };
+
+      return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,0.5)", zIndex: 200, display: "flex", alignItems: "flex-end", backdropFilter: "blur(6px)" }}>
+          <div style={{ width: "100%", maxWidth: 520, margin: "0 auto", background: C.bg, borderRadius: "24px 24px 0 0", padding: "28px 28px 44px", animation: "fadeUp 0.35s ease both", maxHeight: "90vh", overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, fontFamily: display, color: C.onBg, letterSpacing: -0.5 }}>Your Profile</h2>
+                <p style={{ fontSize: 14, color: C.muted, marginTop: 6, marginBottom: 0, lineHeight: 1.5 }}>Helps the AI tailor every routine to you. Update anytime.</p>
+              </div>
+              <button onClick={onDismiss} style={{ background: C.surface, border: "none", color: C.muted, fontSize: 14, cursor: "pointer", padding: "8px 10px", borderRadius: 10, lineHeight: 1, marginLeft: 12, flexShrink: 0 }}>✕</button>
+            </div>
+
+            <div style={{ height: 1, background: C.faint, margin: "20px 0 24px" }} />
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Name (optional)</label>
+              <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Alex" style={inputStyle}
+                onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Goals</label>
+              <input value={form.goals} onChange={e => set("goals", e.target.value)} placeholder="e.g. build muscle, improve flexibility, lose weight" style={inputStyle}
+                onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Restrictions or issues</label>
+              <input value={form.restrictions} onChange={e => set("restrictions", e.target.value)} placeholder="e.g. bad knees, rounded shoulders, rib flare" style={inputStyle}
+                onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Experience level</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["beginner", "intermediate", "advanced"].map(l => (
+                  <button key={l} onClick={() => set("experience", l)} style={{
+                    flex: 1, padding: "10px 0", borderRadius: 12,
+                    border: `1.5px solid ${form.experience === l ? C.primary : C.faint}`,
+                    background: form.experience === l ? C.primaryDim : "rgba(255,255,255,0.5)",
+                    color: form.experience === l ? C.primary : C.muted,
+                    fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: font,
+                    textTransform: "capitalize", transition: "all 0.15s",
+                  }}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Diet (optional)</label>
+              <input value={form.diet} onChange={e => set("diet", e.target.value)} placeholder="e.g. vegan, keto, omnivore" style={inputStyle}
+                onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+            </div>
+            <div style={{ marginBottom: 32 }}>
+              <label style={labelStyle}>Anything else?</label>
+              <textarea value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="e.g. hardgainer, post-surgery recovery, low muscle-to-fat ratio…" rows={2}
+                style={{ ...inputStyle, resize: "none", lineHeight: 1.5 }}
+                onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+            </div>
+            <button onClick={() => { saveProfile(form); onSave(form); }}
+              style={{ width: "100%", background: C.primary, color: C.onPrimary, border: "none", borderRadius: 14, padding: "15px 0", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: display, letterSpacing: -0.2 }}>
+              Save & Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── AI BUILDER PANEL ──────────────────────────────────────────────
+    function AIBuilderPanel({ onClose, onPlanAdded, grove }) {
+      const [profile] = useState(loadProfile);
+      const [apiKey, setApiKey] = useState(loadApiKey);
+      const [showKeyInput, setShowKeyInput] = useState(() => !loadApiKey());
+      const [keyDraft, setKeyDraft] = useState("");
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [addedIds, setAddedIds] = useState(new Set());
+      const endRef = useRef(null);
+      const inputRef = useRef(null);
+
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+      const saveKey = () => {
+        if (!keyDraft.trim()) return;
+        saveApiKey(keyDraft.trim());
+        setApiKey(keyDraft.trim());
+        setShowKeyInput(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+      };
+
+      const sendMessage = async () => {
+        const text = input.trim();
+        if (!text || loading || !apiKey) return;
+        setInput("");
+        const userMsg = { role: "user", content: text };
+        const newMessages = [...messages, userMsg];
+        setMessages(newMessages);
+        setLoading(true);
+        try {
+          const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+              "anthropic-dangerous-direct-browser-access": "true",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-6",
+              max_tokens: 2048,
+              system: buildSystemPrompt(profile),
+              messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+            }),
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error?.message || "API error " + res.status);
+          }
+          const data = await res.json();
+          const content = data.content[0]?.text || "";
+          const plan = extractPlan(content);
+          setMessages(prev => [...prev, { role: "assistant", content, plan }]);
+        } catch (err) {
+          setMessages(prev => [...prev, { role: "assistant", content: "Couldn't reach the API: " + err.message, plan: null }]);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const addToLibrary = (plan, msgIdx) => {
+        addPlan(plan);
+        setAddedIds(prev => new Set([...prev, msgIdx]));
+        onPlanAdded();
+      };
+
+      const suggestions = ["Morning yoga", "30 min strength", "Quick 10 min stretch", "Recovery session"];
+
+      return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(26,26,26,0.5)", zIndex: 200, display: "flex", alignItems: "flex-end", backdropFilter: "blur(6px)" }} onClick={e => e.target === e.currentTarget && onClose()}>
+          <div style={{ width: "100%", maxWidth: 560, margin: "0 auto", background: C.bg, borderRadius: "24px 24px 0 0", height: "88vh", display: "flex", flexDirection: "column", animation: "fadeUp 0.35s ease both" }}>
+
+            {/* Tree Header */}
+            <div style={{ position: "relative", height: 190, background: grove?.bg || C.surface, borderRadius: "24px 24px 0 0", overflow: "hidden", flexShrink: 0 }}>
+              {/* Three.js tree scene */}
+              <div style={{ position: "absolute", bottom: -60, left: -80, right: -80, height: "130%", opacity: grove?.theme?.light ? 0.75 : 0.95, pointerEvents: "none" }}>
+                <TreeBackground exerciseKey="ai-panel" customTheme={grove?.theme} duration={1} growing={false} startCompleted={true} sceneType="single" />
+              </div>
+              {/* Bottom gradient fade into panel */}
+              <div style={{ position: "absolute", inset: 0, background: grove?.gradient || "linear-gradient(to top, rgba(245,244,239,1) 0%, transparent 55%)" }} />
+              {/* Title overlay */}
+              <div style={{ position: "absolute", bottom: 18, left: 24, right: 16, zIndex: 10, display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: grove?.text || C.onBg, fontFamily: display, letterSpacing: -0.5, lineHeight: 1.2 }}>✦ Routine Builder</div>
+                  {profile?.name && <div style={{ fontSize: 12, color: grove?.skyText || C.muted, marginTop: 2, fontWeight: 600, letterSpacing: 0.3 }}>for {profile.name}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setShowKeyInput(s => !s)} title="API Key"
+                    style={{ background: "rgba(0,0,0,0.18)", backdropFilter: "blur(6px)", border: "none", color: showKeyInput ? C.primary : "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer", padding: "7px 10px", borderRadius: 10, transition: "all 0.15s" }}>🔑</button>
+                  <button onClick={onClose}
+                    style={{ background: "rgba(0,0,0,0.18)", backdropFilter: "blur(6px)", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 14, cursor: "pointer", padding: "7px 10px", borderRadius: 10, lineHeight: 1 }}>✕</button>
+                </div>
+              </div>
+            </div>
+
+            {/* API Key Input */}
+            {showKeyInput && (
+              <div style={{ padding: "16px 24px", background: C.surface, borderBottom: `1px solid ${C.faint}`, animation: "fadeUp 0.2s ease both", flexShrink: 0 }}>
+                <p style={{ margin: "0 0 10px", fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                  Your Anthropic API key — saved in this browser only, never sent anywhere else.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && saveKey()}
+                    placeholder="sk-ant-..."
+                    style={{ flex: 1, background: "rgba(255,255,255,0.8)", border: `1px solid ${C.faint}`, borderRadius: 10, padding: "9px 12px", fontSize: 13, color: C.onBg, fontFamily: font, outline: "none" }} />
+                  <button onClick={saveKey} style={{ background: C.primary, color: C.onPrimary, border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: font }}>Save</button>
+                </div>
+              </div>
+            )}
+
+            {/* Messages */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px 8px" }}>
+              {messages.length === 0 && (
+                <div style={{ animation: "fadeUp 0.3s ease both" }}>
+                  <div style={{ background: C.surface, borderRadius: 16, borderBottomLeftRadius: 4, padding: "14px 18px", maxWidth: "85%", marginBottom: 14 }}>
+                    <p style={{ margin: 0, fontSize: 14, color: C.onBg, lineHeight: 1.65 }}>
+                      {profile?.name ? "Hey " + profile.name + "! " : "Hey! "}What kind of routine are you looking for?
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {suggestions.map(s => (
+                      <button key={s} onClick={() => setInput(s)} style={{
+                        background: C.surface, border: `1px solid ${C.faint}`, borderRadius: 100,
+                        padding: "7px 16px", fontSize: 13, color: C.sub, cursor: "pointer", fontFamily: font,
+                        transition: "border-color 0.15s, color 0.15s, background 0.15s",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; e.currentTarget.style.background = C.primaryDim; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = C.faint; e.currentTarget.style.color = C.sub; e.currentTarget.style.background = C.surface; }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {messages.map((msg, i) => (
+                <div key={i} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    background: msg.role === "user" ? C.primary : C.surface,
+                    color: msg.role === "user" ? C.onPrimary : C.onBg,
+                    borderRadius: 16,
+                    borderBottomRightRadius: msg.role === "user" ? 4 : 16,
+                    borderBottomLeftRadius: msg.role === "assistant" ? 4 : 16,
+                    padding: "11px 16px", maxWidth: "85%",
+                    fontSize: 14, lineHeight: 1.65, fontFamily: font,
+                  }}>
+                    {msg.content.replace(/```json[\s\S]*?```/g, "").trim() || (msg.plan ? "Here's what I put together:" : msg.content)}
+                  </div>
+                  {msg.plan && (
+                    <div style={{ maxWidth: "85%", width: "85%", marginTop: 10, background: "rgba(255,255,255,0.85)", border: `1px solid ${C.faint}`, borderRadius: 18, overflow: "hidden", animation: "scaleIn 0.3s ease both", backdropFilter: "blur(4px)" }}>
+                      <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.faint}`, display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontSize: 22 }}>{msg.plan.steps[0]?.emoji}</span>
+                        <div>
+                          <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.onBg, fontFamily: display, letterSpacing: -0.3 }}>{msg.plan.title}</p>
+                          {msg.plan.subtitle && <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>{msg.plan.subtitle}</p>}
+                          <p style={{ margin: "3px 0 0", fontSize: 12, color: C.muted }}>
+                            {msg.plan.steps.length} exercises · {Math.round(calcTotalSecs(msg.plan.steps) / 60)} min
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ padding: "12px 18px" }}>
+                        {msg.plan.steps.slice(0, 3).map((s, si) => (
+                          <div key={si} style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: si < Math.min(2, msg.plan.steps.length - 1) ? 8 : 0 }}>
+                            <span style={{ fontSize: 15 }}>{s.emoji}</span>
+                            <span style={{ fontSize: 13, color: C.sub }}>{s.name}</span>
+                            <span style={{ fontSize: 11, color: C.muted, marginLeft: "auto" }}>{s.sets}×{s.duration}s</span>
+                          </div>
+                        ))}
+                        {msg.plan.steps.length > 3 && (
+                          <p style={{ margin: "8px 0 0", fontSize: 12, color: C.muted }}>+ {msg.plan.steps.length - 3} more</p>
+                        )}
+                      </div>
+                      <div style={{ padding: "12px 18px", borderTop: `1px solid ${C.faint}` }}>
+                        {addedIds.has(i) ? (
+                          <p style={{ margin: 0, fontSize: 13, color: C.primary, fontWeight: 700, textAlign: "center" }}>✓ Added to Library</p>
+                        ) : (
+                          <button onClick={() => addToLibrary(msg.plan, i)} style={{
+                            width: "100%", background: C.primary, color: C.onPrimary, border: "none",
+                            borderRadius: 12, padding: "11px 0", fontSize: 13, fontWeight: 700,
+                            cursor: "pointer", fontFamily: display, letterSpacing: -0.2,
+                          }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = 0.85}
+                            onMouseLeave={e => e.currentTarget.style.opacity = 1}>
+                            Add to Library ✓
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {loading && (
+                <div style={{ background: C.surface, borderRadius: 16, borderBottomLeftRadius: 4, padding: "13px 18px", width: 64, animation: "gentlePulse 1s ease infinite" }}>
+                  <span style={{ fontSize: 15, color: C.muted, letterSpacing: 3 }}>···</span>
+                </div>
+              )}
+              <div ref={endRef} />
+            </div>
+
+            {/* Input */}
+            <div style={{ padding: "14px 24px 36px", borderTop: `1px solid ${C.faint}`, flexShrink: 0, background: C.bg }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  placeholder={apiKey ? "Describe your routine…" : "Save your API key above first ↑"}
+                  disabled={!apiKey || loading} rows={1}
+                  style={{
+                    flex: 1, background: "rgba(255,255,255,0.7)", border: `1px solid ${C.faint}`, borderRadius: 14,
+                    padding: "11px 16px", fontSize: 14, color: C.onBg, fontFamily: font, outline: "none",
+                    resize: "none", lineHeight: 1.5, maxHeight: 100, overflowY: "auto",
+                    opacity: !apiKey ? 0.5 : 1, transition: "all 0.2s",
+                  }}
+                  onFocus={e => { e.target.style.background = "#fff"; e.target.style.borderColor = C.primary; }}
+                  onBlur={e => { e.target.style.background = "rgba(255,255,255,0.7)"; e.target.style.borderColor = C.faint; }} />
+                <button onClick={sendMessage} disabled={!input.trim() || !apiKey || loading}
+                  style={{
+                    width: 42, height: 42, borderRadius: 12, background: C.primary, border: "none",
+                    color: C.onPrimary, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center",
+                    justifyContent: "center", flexShrink: 0,
+                    opacity: (!input.trim() || !apiKey || loading) ? 0.3 : 1, transition: "opacity 0.2s",
+                  }}>↑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── LIBRARY SCREEN ────────────────────────────────────────────────
+    function Library({ onSelect, manualTheme, setManualTheme }) {
+      const [plans, setPlans] = useState(loadPlans());
+      const [search, setSearch] = useState("");
+      const [dragOver, setDragOver] = useState(false);
+      const [error, setError] = useState(null);
+      const [showAI, setShowAI] = useState(false);
+      const [showProfile, setShowProfile] = useState(false);
+      const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+      const fileRef = useRef(null);
+      const libPanelRef = useRef(null);
+      const streak = getStreak();
+
+      useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth < 640);
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+      }, []);
+
+      // Temporarily enable broad transitions when theme changes, then remove
+      // so hover/press interactions stay instant the rest of the time
+      useEffect(() => {
+        const el = libPanelRef.current;
+        if (!el) return;
+        el.classList.add("theme-transitioning");
+        const id = setTimeout(() => el.classList.remove("theme-transitioning"), 600);
+        return () => clearTimeout(id);
+      }, [manualTheme]);
+
+      // Seed the default yoga plan if library is empty
+      useEffect(() => {
+        if (loadPlans().length === 0) {
+          const yogaPlan = { ...DEFAULT_YOGA_PLAN, _id: "builtin-yoga", _importedAt: Date.now() };
+          savePlans([yogaPlan]);
+          setPlans([yogaPlan]);
+        }
+      }, []);
+
+      const openAI = () => {
+        if (!loadProfile()) { setShowProfile(true); } else { setShowAI(true); }
+      };
+
+      const filteredPlans = useMemo(() => {
+        if (!search) return plans;
+        const q = search.toLowerCase();
+        return plans.filter(p => p.title.toLowerCase().includes(q) || p.steps.some(s => s.name.toLowerCase().includes(q)));
+      }, [plans, search]);
+
+      const handleFile = (file) => {
+        setError(null);
+        const reader = new FileReader();
+        reader.onload = (e) => { try { const plan = parsePlanJS(e.target.result); setPlans(addPlan(plan)); } catch (err) { setError("Couldn't read plan: " + err.message); } };
+        reader.readAsText(file);
+      };
+      const handleDrop = (e) => { e.preventDefault(); setDragOver(false); const file = e.target.files?.[0] || e.dataTransfer?.files[0]; if (file) handleFile(file); };
+      const handleDelete = (e, id) => {
+        e.stopPropagation();
+        haptic([10, 30]); // Distinct double-tap vibration for deletion
+        setPlans(prev => prev.filter(p => p._id !== id));
+      };
+
+      const today = new Date();
+      const dayName = today.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
+      const dateString = today.toLocaleDateString("en-GB", { day: "numeric", month: "long" }).toUpperCase();
+
+      const hour = today.getHours();
+      let effectiveHour = hour;
+      if (manualTheme === "light") effectiveHour = 10; // Morning
+      else if (manualTheme === "dark") effectiveHour = 22; // Night
+
+      let groveState;
+      if (effectiveHour >= 5 && effectiveHour < 8) {
+        // Dawn
+        groveState = {
+          greeting: "Good\nmorning,\nGuy",
+          bg: "#e0f2f1",
+          skyText: "#00796b",
+          text: "#004d40",
+          theme: { bg: "#e0f2f1", light: true, trunk: ['#2e4c3b', '#3b5f4a'], inner: ['#4caf50', '#81c784'], mid: ['#aed581', '#c5e1a5'], outer: ['#dcedc8', '#f1f8e9', '#aed581'], depth: 5, girth: 0.9, curve: 1.2, spread: 1.1, density: 1.0, dotSize: 1.2, wind: 0.5 },
+          gradient: "linear-gradient(to top, rgba(224,242,241,1) 0%, transparent 60%)"
+        };
+      } else if (effectiveHour >= 8 && effectiveHour < 12) {
+        // Morning
+        groveState = {
+          greeting: "Ready\nto train",
+          bg: "#fff8e1",
+          skyText: "#f57f17",
+          text: "#3e2723",
+          theme: { bg: "#fff8e1", light: true, trunk: ['#5d4037', '#795548'], inner: ['#f57f17', '#fbc02d'], mid: ['#ffb300', '#ffd54f'], outer: ['#ffe082', '#fff59d', '#ffca28'], depth: 6, girth: 1.1, curve: 1.0, spread: 1.3, density: 1.4, dotSize: 1.5, wind: 1.0 },
+          gradient: "linear-gradient(to top, rgba(255,248,225,1) 0%, transparent 60%)"
+        };
+      } else if (effectiveHour >= 12 && effectiveHour < 17) {
+        // Afternoon
+        groveState = {
+          greeting: "Afternoon",
+          bg: "#ede9e6",
+          skyText: "#8d6e63",
+          text: "#3e2723",
+          theme: { bg: "#ede9e6", light: true, trunk: ['#4e342e', '#5d4037'], inner: ['#8d6e63', '#a1887f'], mid: ['#bcaaa4', '#d7ccc8'], outer: ['#f5f5f5', '#fafafa', '#bcaaa4'], depth: 6, girth: 1.2, curve: 1.1, spread: 1.4, density: 1.6, dotSize: 1.4, wind: 1.5 },
+          gradient: "linear-gradient(to top, rgba(239,235,233,1) 0%, transparent 60%)"
+        };
+      } else if (effectiveHour >= 17 && effectiveHour < 20) {
+        // Dusk
+        groveState = {
+          greeting: "Good\nevening,\nGuy 🌅",
+          bg: "#160a03",
+          skyText: "#c47949",
+          text: "#dfc3b1",
+          theme: { bg: "#160a03", light: false, trunk: ['#120803', '#160a03'], inner: ['#3e1c07', '#5d2b0b'], mid: ['#8c3b0d', '#a34812'], outer: ['#d65f1c', '#f1742d', '#fb955b'], depth: 5, girth: 1.0, curve: 1.5, spread: 1.2, density: 1.1, dotSize: 1.8, wind: 1.2 },
+          gradient: "linear-gradient(to top, rgba(22,10,3,0.95) 0%, transparent 60%)"
+        };
+      } else {
+        // Night
+        groveState = {
+          greeting: "Late\nsession",
+          bg: "#050b14",
+          skyText: "#4dd0e1",
+          text: "#e0f7fa",
+          theme: { bg: "#050b14", light: false, trunk: ['#010e1c', '#03172c'], inner: ['#006064', '#00838f'], mid: ['#007a82', '#009a97'], outer: ['#00d4c8', '#a8ffeb', '#4dd0e1'], depth: 6, girth: 0.8, curve: 1.3, spread: 1.5, density: 0.9, dotSize: 1.5, wind: 0.8 },
+          gradient: "linear-gradient(to top, rgba(5,11,20,0.95) 0%, transparent 60%)"
+        };
+      }
+
+      // Reactive colors: right panel switches with grove theme
+      const isDark = !groveState.theme.light;
+      const Cr = isDark ? {
+        bg: "#12141c", surface: "#1c1f2b", surfaceHigh: "#252838",
+        onBg: "#eeeef2", sub: "#b0b0c0", muted: "#70708a",
+        faint: "rgba(255,255,255,0.07)", faintHover: "rgba(255,255,255,0.12)",
+        primary: C.primary, primaryDim: "rgba(0,201,167,0.18)",
+        danger: C.danger, dangerDim: C.dangerDim, success: C.success,
+        accent: C.accent, accentDim: C.accentDim,
+        onPrimary: C.onPrimary, onAccent: C.onAccent,
+        cardBg: "#1c1f2b", cardBorder: "rgba(255,255,255,0.07)",
+        inputBg: "rgba(255,255,255,0.06)", inputBgFocus: "rgba(255,255,255,0.1)",
+      } : {
+        ...C,
+        cardBg: "#fff", cardBorder: "transparent",
+        inputBg: "rgba(255,255,255,0.7)", inputBgFocus: "#fff",
+      };
+
+      return (
+        <>
+        <div
+          style={{ ...rootStyle, height: "100vh", display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          {/* Drop overlay */}
+          {dragOver && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,201,167,0.06)", border: `2px dashed ${C.primary}`, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", backdropFilter: "blur(4px)" }}>
+              <p style={{ fontSize: 18, color: C.primary, fontWeight: 600 }}>Drop plan.js here</p>
+            </div>
+          )}
+
+          {/* LEFT: EMOTIONAL REGISTER (Atmospheric Forest) */}
+          <div style={{
+            flex: isMobile ? "none" : "1.1",
+            height: isMobile ? 210 : "auto",
+            flexShrink: 0,
+            background: groveState.bg, position: "relative", display: "flex", flexDirection: "column",
+            padding: isMobile ? "28px 24px 20px" : "64px 48px",
+            overflow: "hidden", transition: "background 1s ease"
+          }}>
+            <div style={{ position: "relative", zIndex: 10, display: "flex", alignItems: isMobile ? "center" : "flex-start", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ color: groveState.skyText, fontSize: isMobile ? 11 : 12, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: isMobile ? 4 : 12, opacity: 0.9, fontFamily: font }}>
+                  {dayName} {dateString}
+                </p>
+                <h2 style={{ color: groveState.text, fontSize: isMobile ? 36 : 52, fontWeight: 800, fontFamily: display, letterSpacing: -1.5, lineHeight: 1.05, whiteSpace: "pre-line", margin: 0 }}>
+                  {isMobile ? groveState.greeting.replace(/\n/g, " ") : groveState.greeting}
+                </h2>
+              </div>
+              {/* Streak on the right on mobile */}
+              {isMobile && streak > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.15)", backdropFilter: "blur(6px)", borderRadius: 100, padding: "6px 12px", flexShrink: 0, marginLeft: 12 }}>
+                  <span style={{ fontSize: 14 }}>🔥</span>
+                  <span style={{ color: groveState.skyText, fontSize: 13, fontWeight: 700 }}>{streak}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Forest Effect Layer */}
+            <div style={{ position: "absolute", bottom: isMobile ? -20 : -80, left: isMobile ? -60 : -100, right: isMobile ? -60 : -100, height: isMobile ? "110%" : "80%", opacity: groveState.theme.light ? 0.7 : 0.9, pointerEvents: "none", zIndex: 2 }}>
+              <TreeBackground exerciseKey={0} customTheme={groveState.theme} duration={1} growing={false} startCompleted={true} sceneType="forest" />
+            </div>
+            {/* Grounding Vignette */}
+            <div style={{ position: "absolute", inset: 0, background: groveState.gradient, zIndex: 5, pointerEvents: "none" }} />
+
+            {/* Streak Indicator at Bottom — desktop only */}
+            {!isMobile && (
+              <div style={{ marginTop: "auto", position: "relative", zIndex: 10, display: "flex", justifyContent: "flex-start", paddingLeft: 8 }}>
+                {streak > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, animation: "fadeIn 1s ease" }}>
+                    <span style={{ fontSize: 16 }}>🔥</span>
+                    <span style={{ color: groveState.skyText, fontSize: 14, fontWeight: 600, letterSpacing: 0.5, opacity: 0.9 }}>{streak} day streak</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: FUNCTIONAL REGISTER (Workouts List) */}
+          <div ref={libPanelRef} style={{ flex: 1, background: Cr.bg, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", minHeight: 0 }}>
+            <LibScrollToTop />
+            <div id="lib-scroll-root" style={{ padding: isMobile ? "0 20px 100px" : "0 48px 120px", flex: 1, overflowY: "auto", scrollBehavior: "smooth" }}>
+
+              {/* Sticky Header */}
+              <div style={{
+                position: "sticky", top: 0, zIndex: 10,
+                padding: isMobile ? "20px 0 16px" : "64px 0 24px",
+                background: isDark
+                  ? `linear-gradient(to bottom, ${Cr.bg} 80%, transparent 100%)`
+                  : `linear-gradient(to bottom, ${Cr.bg} 80%, transparent 100%)`,
+                backdropFilter: "blur(4px)", transition: "background 0.4s ease"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isMobile ? 14 : 24 }}>
+                  <h1 style={{ fontSize: isMobile ? 34 : 48, fontWeight: 800, color: Cr.onBg, letterSpacing: -1.5, margin: 0, fontFamily: display, transition: "color 0.4s ease" }}>
+                    Workouts
+                  </h1>
+                  <button
+                    onClick={() => setManualTheme(t => t === "auto" ? "light" : t === "light" ? "dark" : "auto")}
+                    aria-label={`Change theme (currently ${manualTheme})`}
+                    aria-pressed={manualTheme !== "auto"}
+                    style={{ background: Cr.faint, border: "none", borderRadius: 100, padding: isMobile ? "8px 10px" : "8px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: isMobile ? 0 : 8, fontSize: 13, color: Cr.muted, fontWeight: 600, transition: "all 0.2s" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = Cr.faintHover}
+                    onMouseLeave={(e) => e.currentTarget.style.background = Cr.faint}
+                  >
+                    <span className="material-icons" style={{ fontSize: 18 }}>
+                      {manualTheme === "auto" ? "brightness_auto" : manualTheme === "light" ? "light_mode" : "dark_mode"}
+                    </span>
+                    {!isMobile && (manualTheme === "auto" ? "Auto" : manualTheme === "light" ? "Light" : "Dark")}
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div style={{ position: "relative", animation: "fadeUp 0.4s ease 0.1s both" }}>
+                  <span className="material-icons" style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: Cr.muted, fontSize: 20 }}>search</span>
+                  <input
+                    type="text"
+                    placeholder="Find a workout..."
+                    aria-label="Search workouts"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{ width: "100%", background: Cr.inputBg, border: `1px solid ${Cr.faint}`, borderRadius: 16, padding: "14px 16px 14px 48px", fontSize: 15, fontFamily: font, color: Cr.onBg, outline: "none", transition: "all 0.2s", backdropFilter: "blur(8px)" }}
+                    onFocus={(e) => { e.target.style.background = Cr.inputBgFocus; e.target.style.borderColor = Cr.primary; e.target.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; }}
+                    onBlur={(e) => { e.target.style.background = Cr.inputBg; e.target.style.borderColor = Cr.faint; e.target.style.boxShadow = "none"; }}
+                  />
+                </div>
+              </div>
+
+              {/* Workout Grid */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+                gap: 16
+              }}>
+                {filteredPlans.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "64px 24px", border: `2px dashed ${Cr.faint}`, borderRadius: 24, marginTop: 8, background: Cr.faint }}>
+                    <div style={{ marginBottom: 16, opacity: 0.5 }}>
+                      <span className="material-icons" style={{ fontSize: 48, color: Cr.muted }}>
+                        {search ? "search_off" : "folder_open"}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 16, fontWeight: 600, color: Cr.sub, margin: "0 0 8px 0" }}>{search ? "No results found" : "Drop your workout plan here"}</p>
+                    <p style={{ fontSize: 14, color: Cr.muted, margin: 0 }}>{search ? "Try a different search term" : "Import a .js file to get started"}</p>
+                  </div>
+                )}
+
+                {filteredPlans.map((plan, idx) => {
+                  const color = EXERCISE_COLORS[idx % EXERCISE_COLORS.length];
+                  return (
+                    <WorkoutLibCard
+                      key={plan._id}
+                      plan={plan}
+                      color={color}
+                      onSelect={onSelect}
+                      onDelete={handleDelete}
+                      index={idx}
+                      isDark={isDark}
+                      Cr={Cr}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Import + AI Actions */}
+              <div style={{ marginTop: isMobile ? 24 : 40, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input ref={fileRef} type="file" accept=".js" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Import workout plan"
+                  style={{
+                    background: "none", border: `1px dashed ${Cr.muted}`, color: Cr.muted,
+                    borderRadius: 100, padding: "12px 24px", cursor: "pointer",
+                    fontSize: 14, display: "flex", alignItems: "center", gap: 10,
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = Cr.sub; e.currentTarget.style.color = Cr.sub; e.currentTarget.style.background = Cr.faint; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = Cr.muted; e.currentTarget.style.color = Cr.muted; e.currentTarget.style.background = "none"; }}
+                >
+                  <span className="material-icons" style={{ fontSize: 18 }}>add</span>
+                  Import plan.js
+                </button>
+                <button
+                  onClick={openAI}
+                  aria-label="Create routine with AI"
+                  style={{
+                    background: "none", border: "1px solid #00c9a7", color: "#00c9a7",
+                    borderRadius: 100, padding: "12px 24px", cursor: "pointer",
+                    fontSize: 14, display: "flex", alignItems: "center", gap: 10,
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,201,167,0.08)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                >
+                  ✦ Create with AI
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        {showProfile && (
+          <ProfileSetupModal
+            onSave={() => { setShowProfile(false); setShowAI(true); }}
+            onDismiss={() => setShowProfile(false)}
+          />
+        )}
+        {showAI && (
+          <AIBuilderPanel
+            onClose={() => setShowAI(false)}
+            onPlanAdded={() => setPlans(loadPlans())}
+            grove={groveState}
+          />
+        )}
+        </>
+      );
+    }
+
+    // New sub-component for workout cards in library
+    function WorkoutLibCard({ plan, color, onSelect, onDelete, index, isDark, Cr }) {
+      const [hovered, setHovered] = useState(false);
+      const totalSecs = calcTotalSecs(plan.steps);
+      const importDate = plan._importedAt ? new Date(plan._importedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
+      const previewExercises = plan.steps.slice(0, 3);
+      const hasMore = plan.steps.length > 3;
+      // Fallback if Cr not passed (safety)
+      const cr = Cr || C;
+
+      return (
+        <button
+          onClick={() => { sfxEngine.init(); onSelect(plan); }}
+          aria-label={`Start ${plan.title} workout`}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            width: "100%",
+            background: hovered ? (isDark ? cr.surfaceHigh : "#fff") : (isDark ? cr.surface : "#fff"),
+            border: `1px solid ${hovered ? color + "55" : cr.cardBorder}`,
+            borderRadius: 24, padding: "16px 16px 14px",
+            boxShadow: isDark
+              ? (hovered ? `0 12px 32px rgba(0,0,0,0.3)` : "none")
+              : (hovered ? "0 12px 24px rgba(0,0,0,0.06)" : "0 2px 8px rgba(0,0,0,0.02)"),
+            cursor: "pointer", textAlign: "left",
+            display: "flex", flexDirection: "column", gap: 12,
+            transition: "all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
+            animation: `fadeUp 0.4s ease ${index * 0.1}s both`,
+            fontFamily: font, position: "relative"
+          }}
+        >
+          {/* Top row: icon + title + meta + arrow */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {/* Icon Chip */}
+            <div style={{
+              width: 52, height: 52, borderRadius: 14,
+              background: `${color}${isDark ? "22" : "12"}`, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: color, flexShrink: 0
+            }}>
+              {getIcon(plan.steps[0]?.emoji) ? (
+                <span className="material-icons" style={{ fontSize: 26 }}>{getIcon(plan.steps[0].emoji)}</span>
+              ) : (
+                <span style={{ fontSize: 24 }}>{plan.steps[0]?.emoji || "💪"}</span>
+              )}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: cr.onBg, letterSpacing: -0.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{plan.title}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                <span style={{ fontSize: 12, color: cr.muted, fontWeight: 500 }}>{plan.steps.length} exercises · {fmtMins(totalSecs)}</span>
+                {importDate && <span style={{ fontSize: 12, color: cr.muted, fontWeight: 500, opacity: 0.7 }}>· {importDate}</span>}
+              </div>
+            </div>
+
+            <div style={{
+              width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+              background: hovered ? color : cr.faint,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.2s ease",
+              color: hovered ? "#fff" : cr.muted
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+          </div>
+
+          {/* Exercise preview pills */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingLeft: 2 }}>
+            {previewExercises.map((s, i) => (
+              <span key={i} style={{
+                fontSize: 11, fontWeight: 600, color: `${color}${isDark ? "EE" : "CC"}`,
+                background: `${color}${isDark ? "25" : "0E"}`,
+                padding: "3px 10px", borderRadius: 100,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 140,
+              }}>
+                {s.name}
+              </span>
+            ))}
+            {hasMore && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: cr.muted, padding: "3px 0" }}>
+                +{plan.steps.length - 3} more
+              </span>
+            )}
+          </div>
+
+          {/* Delete button */}
+          {hovered && (
+            <button
+              onClick={(e) => onDelete(e, plan._id)}
+              aria-label="Delete workout"
+              style={{
+                position: "absolute", top: -8, right: -8,
+                background: isDark ? cr.surface : "#fff",
+                border: `1px solid ${cr.faint}`,
+                color: cr.muted, cursor: "pointer",
+                width: 26, height: 26, borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 10,
+                transition: "color 0.2s"
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = C.danger; e.currentTarget.style.borderColor = C.danger + "44"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = cr.muted; e.currentTarget.style.borderColor = cr.faint; }}
+            >
+              <span className="material-icons" style={{ fontSize: 14 }}>delete</span>
+            </button>
+          )}
+        </button>
+      );
+    }
+
+    // ─── SOUND TOGGLE ──────────────────────────────────────────────────
+    function SoundBtn({ mute, onToggle }) {
+      const [hover, setHover] = useState(false);
+      const [vol, setVol] = useState(sfxEngine.getVolume());
+
+      const handleVolChange = (e) => {
+        const v = parseFloat(e.target.value);
+        setVol(v);
+        sfxEngine.setVolume(v);
+        if (v > 0 && mute) onToggle();
+        else if (v === 0 && !mute) onToggle();
+      };
+
+      return (
+        <div 
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          style={{
+            position: "absolute", top: 24, right: 24,
+            display: "flex", alignItems: "center", gap: 8,
+            zIndex: 1000,
+          }}
+        >
+          {hover && !mute && (
+            <input 
+              type="range" min="0" max="1" step="0.05" 
+              value={vol} onChange={handleVolChange}
+              aria-label="Volume"
+              style={{ 
+                width: 60, height: 4, borderRadius: 2, 
+                appearance: "none", background: C.faintHover,
+                cursor: "pointer", outline: "none"
+              }}
+            />
+          )}
+          <button 
+            onClick={onToggle} 
+            aria-label={mute ? "Unmute sound" : "Mute sound"}
+            aria-pressed={mute}
+            style={{
+              background: "none", border: "none", color: C.muted,
+              cursor: "pointer", padding: 4, opacity: hover ? 1 : 0.5,
+              transition: "opacity 0.2s",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}
+          >
+            <span className="material-icons" style={{ fontSize: 22 }}>
+              {mute || vol === 0 ? "volume_off" : vol < 0.5 ? "volume_down" : "volume_up"}
+            </span>
+          </button>
+        </div>
+      );
+    }
+
+    // ─── PLAN PLAYER ───────────────────────────────────────────────────
+    // ─── ANIMATED COLON TIMER ──────────────────────────────────────────
+    function AnimatedColonTimer({ seconds, color, squashed }) {
+      const mins = Math.floor(seconds / 60);
+      const secs = String(seconds % 60).padStart(2, "0");
+      const fontSize = "clamp(80px, 20vw, 45vh)";
+
+      const dotBase = {
+        display: "block",
+        width: "0.13em",
+        height: "0.13em",
+        borderRadius: "50%",
+        background: color,
+        transition: "width 0.14s cubic-bezier(0.2, 0, 0, 1), height 0.14s cubic-bezier(0.2, 0, 0, 1), border-radius 0.14s cubic-bezier(0.2, 0, 0, 1), transform 0.14s cubic-bezier(0.2, 0, 0, 1)",
+      };
+      const dotSquashed = {
+        ...dotBase,
+        width: "0.32em",
+        height: "0.09em",
+        borderRadius: "0.05em",
+      };
+      const dot = squashed ? dotSquashed : dotBase;
+
+      return (
+        <div style={{
+          display: "flex", alignItems: "center",
+          fontFamily: display, fontSize, fontWeight: 800,
+          color, lineHeight: 0.9, letterSpacing: "-0.04em",
+          fontVariantNumeric: "tabular-nums", userSelect: "none",
+        }}>
+          <span>{mins}</span>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            gap: "0.09em", margin: "0 0.04em 0.04em",
+          }}>
+            <span style={dot} />
+            <span style={dot} />
+          </div>
+          <span>{secs}</span>
+        </div>
+      );
+    }
+
+    // ─── RUNNING SCREEN ────────────────────────────────────────────────
+    function RunningScreen({ plan, si, t, step, done, exColor, treeTheme, isDark, onDark,
+      timerColor, mutedOnBg, labelOnBg, particles, mute, setMute, onBack, onPause,
+      paused, onResume, onSkip, onSetClick }) {
+
+      const [squashed, setSquashed] = useState(false);
+      const [hintVisible, setHintVisible] = useState(false);
+      const hintTimer = useRef(null);
+      const gesture = useRef({ startX: 0, startY: 0, time: 0 });
+
+      useEffect(() => {
+        const handleKeys = (e) => {
+          if (e.code === "Space") {
+            e.preventDefault();
+            paused ? onResume() : onPause();
+            haptic(10);
+          } else if (e.key === "Escape") {
+            onBack();
+          } else if (e.key === "ArrowRight") {
+            onSkip();
+            haptic(15);
+          }
+        };
+        window.addEventListener("keydown", handleKeys);
+        return () => window.removeEventListener("keydown", handleKeys);
+      }, [paused, onResume, onPause, onBack, onSkip]);
+
+      // Unified gesture logic for desktop/mobile
+      const handlePointerDown = (e) => {
+        gesture.current = { startX: e.clientX, startY: e.clientY, time: Date.now() };
+        if (paused) return;
+        hintTimer.current = setTimeout(() => setHintVisible(true), 1500); 
+      };
+
+      const handlePointerUp = (e) => {
+        clearTimeout(hintTimer.current);
+        setHintVisible(false);
+        setSquashed(false);
+
+        const dx = e.clientX - gesture.current.startX;
+        const dy = Math.abs(e.clientY - gesture.current.startY);
+        const dt = Date.now() - gesture.current.time;
+
+        // 1. Swipe Right (> 40px distance, primarily horizontal)
+        if (dx > 40 && dx > dy * 1.5) {
+          haptic([20, 30]);
+          onBack();
+          return;
+        }
+
+        // 2. Simple Tap (small movement, quick duration)
+        if (Math.abs(dx) < 10 && dy < 10 && dt < 400) {
+          haptic(10);
+          paused ? onResume() : onPause();
+        }
+      };
+
+
+      return (
+        <div
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          style={{ ...rootStyle, background: treeTheme.bg, alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "default", touchAction: "none" }}
+        >
+          {/* Tree — dims when paused */}
+          <div style={{ position: "absolute", inset: 0, zIndex: 15, opacity: paused ? 0.15 : 1, transition: "opacity 0.4s ease", pointerEvents: "none", willChange: "opacity" }}>
+            <TreeBackground
+              exerciseKey={`${si}_${done}`}
+              customTheme={treeTheme}
+              duration={step.duration}
+              growing={!paused}
+              startCompleted={paused}
+            />
+          </div>
+          <ParticleBurstLayer particles={particles} />
+
+          {/* Top bar */}
+          <div data-no-pause="true" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
+            <div style={{ padding: "20px 0 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <JourneyBar 
+                steps={plan.steps} 
+                currentIndex={si} 
+                phase="running" 
+                activeColor={exColor} 
+                onDark={onDark} 
+                currentTime={t} 
+                totalTime={step.duration} 
+              />
+              <p style={{ 
+                margin: 0, 
+                fontFamily: display, 
+                fontSize: paused ? 16 : 11, 
+                fontWeight: 700, 
+                color: paused ? (isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.8)") : labelOnBg, 
+                letterSpacing: 2, 
+                textTransform: "uppercase", 
+                transition: "all 0.4s ease", 
+                opacity: paused ? 0.35 : 0.85 
+              }}>{step.name}</p>
+            </div>
+          </div>
+
+          <button data-no-pause="true" onClick={onBack} aria-label="Go back to library" style={{ position: "absolute", top: 24, left: 24, background: "none", border: "none", color: mutedOnBg, cursor: "pointer", padding: 8, opacity: paused ? 0.4 : 0.7, zIndex: 100, transition: "all 0.2s ease", borderRadius: 12 }} onPointerEnter={(e) => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" } onPointerLeave={(e) => e.currentTarget.style.background = "none" }>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          </button>
+          <div data-no-pause="true"><SoundBtn mute={mute} onToggle={() => setMute(m => !m)} /></div>
+
+          {/* Timer — slides up when paused */}
+          <div style={{
+            position: "relative", zIndex: 10,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+            opacity: 1,
+            transform: paused ? "translateY(-15vh)" : "translateY(0)",
+            transition: "transform 0.25s cubic-bezier(0.2, 0, 0, 1)",
+            willChange: "transform",
+            filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.10))",
+          }}>
+            <AnimatedColonTimer seconds={t} color={timerColor} squashed={squashed || paused} />
+            <SetDots 
+              total={step.sets} 
+              done={done} 
+              color={exColor} 
+              onDark={onDark} 
+              onSetClick={(i) => {
+                if (paused || phase === "running" || phase === "rest") {
+                  haptic(20);
+                  onSetClick && onSetClick(i);
+                }
+              }}
+            />
+          </div>
+
+          {/* Tap-to-pause / resume hint */}
+          <div style={{
+            position: "absolute", bottom: 48, left: 0, right: 0, zIndex: 10,
+            display: "flex", justifyContent: "center",
+            opacity: hintVisible || paused ? 1 : 0,
+            transition: "opacity 1.2s ease",
+            pointerEvents: "none",
+          }}>
+            <p style={{ margin: 0, fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", fontFamily: font, color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.3)", transition: "opacity 0.4s ease" }}>
+              {paused ? "tap to resume" : "tap to pause"}
+            </p>
+          </div>
+
+          {/* ── Info Card (Paused) ── */}
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 30,
+            transform: paused ? "translateY(0)" : "translateY(110%)",
+            transition: "transform 0.28s cubic-bezier(0.2, 0, 0, 1)",
+            padding: "0 20px 88px",
+            pointerEvents: "none",
+            willChange: "transform",
+            display: "flex", justifyContent: "center", width: "100%"
+          }}>
+            <div style={{
+              background: isDark ? "rgba(10,5,20,0.30)" : "rgba(255,255,255,0.40)",
+              backdropFilter: "blur(40px) saturate(160%)",
+              WebkitBackdropFilter: "blur(40px) saturate(160%)",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+              borderRadius: 24, padding: "24px",
+              position: "relative",
+              pointerEvents: "auto",
+              width: "100%", maxWidth: "min(600px, 85vw)",
+            }}>
+              <p style={{ margin: "0 0 8px", fontSize: 11, color: exColor, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700 }}>How to do it</p>
+              <p style={{ margin: "0 0 20px", fontSize: 15, color: isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.85)", lineHeight: 1.6, fontWeight: 400 }}>{step.cue}</p>
+
+              {step.why && (
+                <>
+                  <p style={{ margin: "0 0 6px", fontSize: 11, color: mutedOnBg, letterSpacing: 1, textTransform: "uppercase", fontWeight: 600 }}>Why this exercise</p>
+                  <p style={{ margin: 0, fontSize: 14, color: isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.6)", lineHeight: 1.5, fontStyle: "italic" }}>{step.why}</p>
+                </>
+              )}
+
+              <div data-no-pause="true" style={{ position: "absolute", top: 16, right: 16 }}>
+                <button onClick={onSkip} style={{ background: "none", border: "none", color: mutedOnBg, fontSize: 12, opacity: 0.7, padding: 8, cursor: "pointer", fontFamily: font }}>Skip</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─── CTA SLAB ─────────────────────────────────────────────────────
+    function CTASlab({ color, label, details, onLaunch, showSkip, onSkip, floods = true }) {
+      const [pressed, setPressed] = useState(false);
+      const [hovered, setHovered] = useState(false);
+      const [flooding, setFlooding] = useState(false);
+      const [flooded, setFlooded] = useState(false);
+      
+      const pressScale = useSpring(pressed ? 0.97 : 1, 800, 80);
+
+      const handlePointerDown = () => setPressed(true);
+      const handlePointerUp = () => {
+        setPressed(false);
+        if (floods) {
+          setFlooding(true);
+          setTimeout(() => {
+            setFlooded(true);
+            onLaunch();
+          }, 300);
+        } else {
+          onLaunch();
+        }
+      };
+
+      return (
+        <div style={{ position: "relative", zIndex: 20, marginTop: "auto", width: "100%" }}>
+
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => { setPressed(false); setHovered(false); }}
+            style={{
+              background: flooding ? color : (hovered ? `${color}12` : `${C.surface}60`),
+              border: flooding ? "none" : `1px solid ${C.faintHover}`,
+              position: flooding ? "fixed" : "relative",
+              bottom: flooding ? 0 : "auto",
+              left: flooding ? 0 : "auto",
+              right: flooding ? 0 : "auto",
+              minHeight: flooding ? "100vh" : 88,
+              width: flooding ? "100vw" : "100%",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: flooding ? 0 : "20px 28px",
+              cursor: "pointer",
+              transform: flooding ? "none" : `scale(${pressScale})`,
+              transformOrigin: "center center",
+              transition: flooding
+                ? "height 0.28s cubic-bezier(0.4,0,0.2,1), background 0.1s ease"
+                : "background 0.2s ease",
+              overflow: "hidden",
+              userSelect: "none", touchAction: "none",
+              borderRadius: flooding ? 0 : 28,
+            }}
+          >
+            {!flooding && (
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontFamily: display, fontSize: 18, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color }}>{label}</span>
+                  {details && <span style={{ fontSize: 13, color: C.onBg }}>{details}</span>}
+                </div>
+                <div style={{ 
+                  width: 44, height: 44, borderRadius: "50%", 
+                  border: `1px solid ${color}40`, 
+                  background: hovered ? `${color}25` : `${color}10`, 
+                  display: "flex", alignItems: "center", justifyContent: "center", color,
+                  transition: "background 0.2s ease"
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function PlanPlayer({ plan, onBack: onBackProp, themeOverride }) {
+      const PLAN = plan;
+      const [si, setSi] = useState(0);
+      const [set, setSet] = useState(1);
+      const [done, setDone] = useState(0);
+      const [t, setT] = useState(PLAN.steps[0].duration);
+      const [restT, setRestT] = useState(0);
+      const [phase, setPhase] = useState("idle");
+      const [mute, setMute] = useState(false);
+      const [logged, setLogged] = useState(false);
+      const [notionPageId, setNotionPageId] = useState(null);
+      const [startTime, setStartTime] = useState(null);
+      const [showConfetti, setShowConfetti] = useState(false);
+      const [streak, setStreak] = useState(0);
+      const [countdownT, setCountdownT] = useState(0);
+      const [skipHover, setSkipHover] = useState(false);
+      const iv = useRef(null);
+      const cdRef = useRef(null);
+      const step = PLAN.steps[si];
+      const exColor = exerciseColor(si);
+      const currentShape = shapeName(set - 1);
+      const [particles, triggerBurst] = useParticleBurst();
+      const sfx = useCallback((fn) => { if (!mute) fn(); }, [mute]);
+
+      const totalSecs = calcTotalSecs(PLAN.steps);
+      const prevSecs = PLAN.steps.slice(0, si).reduce((a, s) => a + s.duration * s.sets + s.restBetweenSets * Math.max(0, s.sets - 1), 0);
+      const curSecs = done * step.duration + (phase === "running" ? step.duration - t : 0) + done * step.restBetweenSets;
+      const overall = Math.min(1, (prevSecs + curSecs) / totalSecs);
+
+      // Time remaining estimate
+      const elapsedSecs = prevSecs + curSecs;
+      const remainingSecs = totalSecs - elapsedSecs;
+
+      // Nudge category based on progress
+      const nudgeCategory = overall < 0.1 ? "start" : overall < 0.5 ? "start" : overall < 0.8 ? "midway" : "almostDone";
+      const [currentNudge] = useState(() => getNudge("start"));
+
+      const [showConfirmBack, setShowConfirmBack] = useState(false);
+
+      const onBack = () => {
+        if (["running", "rest", "paused", "countdown"].includes(phase)) {
+          setShowConfirmBack(true);
+        } else {
+          onBackProp();
+        }
+      };
+
+      useEffect(() => {
+        const handleVis = () => { if (document.visibilityState === 'visible') requestWakeLock(); };
+        document.addEventListener('visibilitychange', handleVis);
+        requestWakeLock();
+        return () => { document.removeEventListener('visibilitychange', handleVis); releaseWakeLock(); };
+      }, []);
+
+      useEffect(() => {
+        clearInterval(iv.current);
+        if (showConfirmBack) return; // Freeze while dialog is open
+
+        if (phase === "running") {
+          if (!startTime) setStartTime(Date.now());
+          const targetEndTime = Date.now() + t * 1000;
+          iv.current = setInterval(() => {
+            setT(prev => {
+              const remaining = Math.max(0, Math.ceil((targetEndTime - Date.now()) / 1000));
+              if (remaining <= 0) {
+                clearInterval(iv.current);
+                const nd = done + 1;
+                haptic([40, 20, 40]);
+                if (nd >= step.sets) { sfx(sfxEngine.exDone); setDone(nd); setPhase("exDone"); }
+                else { sfx(sfxEngine.setDone); triggerBurst(exColor); setDone(nd); setRestT(step.restBetweenSets); setPhase("rest"); }
+                return 0;
+              }
+              if (remaining <= 4 && remaining < prev) { sfx(sfxEngine.beep); haptic(10); }
+              else if ((remaining - 1) % 10 === 0 && remaining < prev) { sfx(sfxEngine.tick); haptic(5); }
+              return remaining;
+            });
+          }, 1000);
+        } else if (phase === "rest") {
+          const targetEndTime = Date.now() + restT * 1000;
+          iv.current = setInterval(() => {
+            setRestT(prev => {
+              const remaining = Math.max(0, Math.ceil((targetEndTime - Date.now()) / 1000));
+              if (remaining <= 0) { clearInterval(iv.current); sfx(sfxEngine.ready); setSet(s => s + 1); setT(step.duration); setPhase("running"); return 0; }
+              if (remaining <= 4 && remaining < prev) sfx(sfxEngine.beep);
+              return remaining;
+            });
+          }, 1000);
+        } else if (phase === "countdown") {
+          const targetEndTime = Date.now() + countdownT * 1000;
+          iv.current = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((targetEndTime - Date.now()) / 1000));
+            if (remaining <= 0) { clearInterval(iv.current); sfx(sfxEngine.ready); setPhase("running"); }
+            else {
+              setCountdownT(prev => {
+                if (remaining < prev) sfx(sfxEngine.beep);
+                return remaining;
+              });
+            }
+          }, 1000);
+        }
+        return () => clearInterval(iv.current);
+      }, [phase, showConfirmBack]);
+
+      // Log to Notion when workout completes
+      useEffect(() => {
+        if (phase === "allDone" && !logged) {
+          setLogged(true);
+          setShowConfetti(true);
+          const s = incrementStreak();
+          setStreak(s);
+          logWorkout(PLAN).then(pageId => setNotionPageId(pageId));
+        }
+      }, [phase, logged]);
+
+      const start = () => { sfx(sfxEngine.ready); setPhase("running"); };
+      const startCountdown = () => {
+        sfx(sfxEngine.tick);
+        setCountdownT(3);
+        setPhase("countdown");
+      };
+      const pause = () => { clearInterval(iv.current); setPhase("paused"); };
+      const resume = () => { sfx(sfxEngine.ready); setPhase("running"); };
+      const skipRest = () => { clearInterval(iv.current); sfx(sfxEngine.ready); haptic(20); setSet(s => s + 1); setT(step.duration); setPhase("running"); };
+      const next = () => {
+        clearInterval(iv.current);
+        haptic(30);
+        if (si < PLAN.steps.length - 1) {
+          const n = si + 1; setSi(n); setSet(1); setDone(0); setT(PLAN.steps[n].duration); setPhase("idle");
+        } else { sfx(sfxEngine.allDone); setPhase("allDone"); }
+      };
+      const reset = () => { clearInterval(iv.current); clearInterval(cdRef.current); setSi(0); setSet(1); setDone(0); setT(PLAN.steps[0].duration); setPhase("idle"); setLogged(false); setNotionPageId(null); setStartTime(null); setShowConfetti(false); };
+
+      const handleNotesSave = async (notes) => { await saveSessionNotes({ notionPageId, ...notes }); setPhase("done"); };
+      const handleNotesSkip = () => setPhase("done");
+
+      const handleSetClick = (setIndex) => {
+        if (setIndex === done) return;
+        setDone(setIndex);
+        setSet(setIndex + 1);
+        setT(step.duration);
+        setPhase("idle"); 
+      };
+
+      const elapsedMinutes = startTime ? Math.round((Date.now() - startTime) / 60000) : 0;
+
+      const renderPhase = () => {
+      // ─── SCREEN: Session Notes ─────────────────────────
+      if (phase === "sessionNotes") return <SessionNotesScreen planTitle={PLAN.title} onSave={handleNotesSave} onSkip={handleNotesSkip} />;
+
+      // ─── SCREEN: Final Done ────────────────────────────
+      if (phase === "done") return (
+        <div style={{ ...rootStyle, alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "0 32px", textAlign: "center" }}>
+            <AnimatedCheck size={56} color={EXERCISE_COLORS[3]} />
+            <div>
+              <h1 style={{ margin: 0, fontFamily: display, fontSize: 32, fontWeight: 800, color: C.onBg, letterSpacing: -1, lineHeight: 1.1 }}>Session logged</h1>
+              <p style={{ margin: "8px 0 0", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Saved to Notion. See you next time.</p>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <Btn onClick={reset} variant="tonal">Start over</Btn>
+              <Btn onClick={onBack} variant="text">Library</Btn>
+            </div>
+          </div>
+        </div>
+      );
+
+      // ─── SCREEN: All Done (Power of Moments: peak-end elevation) ───
+      if (phase === "allDone") return (
+        <div style={{ ...rootStyle, alignItems: "center", justifyContent: "center" }}>
+          <Confetti active={showConfetti} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "0 32px", textAlign: "center" }}>
+            {/* Stats row */}
+            <div style={{ display: "flex", gap: 32, marginBottom: 8, animation: "fadeUp 0.5s ease 0.2s both" }}>
+              {[
+                { val: PLAN.steps.length, label: "exercises" },
+                { val: elapsedMinutes || Math.round(totalSecs / 60), label: "minutes" },
+                { val: PLAN.steps.reduce((a, s) => a + s.sets, 0), label: "sets" },
+              ].map((stat, i) => (
+                <div key={i} style={{ textAlign: "center" }}>
+                  <p style={{ margin: 0, fontFamily: display, fontSize: 48, fontWeight: 800, color: EXERCISE_COLORS[i % EXERCISE_COLORS.length], letterSpacing: -2, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{stat.val}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11, color: C.muted, letterSpacing: 0.5, textTransform: "uppercase" }}>{stat.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ animation: "fadeUp 0.5s ease 0.4s both" }}>
+              <h1 style={{ margin: 0, fontFamily: display, fontSize: 32, fontWeight: 800, color: C.onBg, letterSpacing: -1, lineHeight: 1.1 }}>
+                {getNudge("done")}
+              </h1>
+              {streak > 1 && (
+                <p style={{ margin: "10px 0 0", fontSize: 14, color: C.accent, fontWeight: 500 }}>
+                  🔥 {streak} day streak — keep it going
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginTop: 8, animation: "fadeUp 0.5s ease 0.6s both" }}>
+              <M3EPillBtn onClick={() => setPhase("sessionNotes")} color={EXERCISE_COLORS[3]}>How'd it go?</M3EPillBtn>
+              <Btn variant="text" onClick={handleNotesSkip} style={{ fontSize: 12, opacity: 0.6 }}>Skip</Btn>
+            </div>
+          </div>
+        </div>
+      );
+
+      // ─── SCREEN: Rest ──────────────────────────────────
+      const treeTheme = useMemo(() => makeTreeTheme(exColor, themeOverride), [exColor, themeOverride]);
+      const isDark = !treeTheme.light;
+      const onDark = isDark;
+      const timerColor = isDark ? "rgba(255,255,255,0.92)" : C.onBg;
+      const mutedOnBg = isDark ? "rgba(255,255,255,0.45)" : C.muted;
+      const labelOnBg = isDark ? "rgba(255,255,255,0.70)" : exColor;
+
+      if (phase === "rest") return (
+        <div style={{ ...rootStyle, background: treeTheme.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          {/* Fully-grown tree — gently swaying */}
+          <div style={{ position: "absolute", inset: 0, zIndex: 15, pointerEvents: "none" }}>
+            <TreeBackground
+              exerciseKey={`${si}_${done}`}
+              customTheme={treeTheme}
+              duration={step.duration}
+              growing={false}
+              startCompleted={true}
+            />
+          </div>
+          {/* Soft rest-mode tint overlay */}
+          <div style={{ position: "absolute", inset: 0, background: isDark ? "rgba(100,60,180,0.07)" : "rgba(199,125,255,0.06)", zIndex: 1, pointerEvents: "none" }} />
+
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "20px 0 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 10 }}>
+            <JourneyBar 
+              steps={PLAN.steps} 
+              currentIndex={si} 
+              phase="rest" 
+              activeColor={exColor} 
+              onDark={onDark} 
+              currentTime={restT} 
+              totalTime={step.restBetweenSets} 
+            />
+          </div>
+          <button onClick={onBack} style={{ position: "absolute", top: 20, left: 20, background: "none", border: "none", color: mutedOnBg, fontSize: 13, cursor: "pointer", padding: 8, opacity: 0.7, fontFamily: font, zIndex: 20 }}>← Back</button>
+          <SoundBtn mute={mute} onToggle={() => setMute(m => !m)} />
+
+          <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, animation: "fadeIn 0.3s ease both" }}>
+            <p style={{ margin: 0, fontSize: 11, color: isDark ? "rgba(199,125,255,0.9)" : C.rest, letterSpacing: 2, textTransform: "uppercase", fontWeight: 700 }}>
+              Rest · set {done} of {step.sets}
+            </p>
+            <span style={{
+              fontFamily: display, fontSize: "clamp(100px, 25vw, 50vh)", fontWeight: 800,
+              color: isDark ? "rgba(255,255,255,0.88)" : C.rest,
+              lineHeight: 0.9, letterSpacing: "-0.04em",
+              fontVariantNumeric: "tabular-nums",
+            }}>{restT}<span style={{ fontSize: "0.3em", fontWeight: 600 }}>s</span></span>
+
+            <p style={{ margin: 0, fontSize: 14, color: mutedOnBg, textAlign: "center" }}>{getNudge("rest")}</p>
+            <Btn variant="text" onClick={skipRest} style={{ fontSize: 13, color: isDark ? "rgba(199,125,255,0.9)" : C.rest, marginTop: 8 }}>Skip rest →</Btn>
+          </div>
+        </div>
+      );
+
+      // ─── SCREEN: Countdown (get into position) ─────────
+      if (phase === "countdown") return (
+        <div style={{ ...rootStyle, background: treeTheme.bg, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          {/* Tree already growing beneath — will be revealed when flood fades */}
+          <div style={{ position: "absolute", inset: 0, zIndex: 15, pointerEvents: "none" }}>
+            <TreeBackground
+              exerciseKey={`${si}_${done}`}
+              customTheme={treeTheme}
+              duration={step.duration * 8}
+              growing={true}
+              startCompleted={false}
+            />
+          </div>
+
+          {/* Flood color overlay — fades out on final beat (countdownT === 1) */}
+          <div style={{
+            position: "absolute", inset: 0, background: exColor, zIndex: 5,
+            opacity: countdownT === 1 ? 0 : 1,
+            transition: countdownT === 1 ? "opacity 0.65s ease" : "none",
+            pointerEvents: "none",
+          }} />
+
+          {/* Journey bar sits above the flood */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "20px 0 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, zIndex: 10 }}>
+            <JourneyBar 
+              steps={PLAN.steps} 
+              currentIndex={si} 
+              phase="running" 
+              activeColor={exColor} 
+              onDark={onDark} 
+              currentTime={3} 
+              totalTime={3} 
+            />
+          </div>
+          <SoundBtn mute={mute} onToggle={() => setMute(m => !m)} />
+
+          {/* Countdown number — white while flood is solid, adapts as it fades */}
+          <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <span
+              key={countdownT}
+              style={{
+                fontFamily: display, fontSize: "clamp(120px, 35vw, 60vh)", fontWeight: 800,
+                color: countdownT === 1 ? timerColor : "#fff",
+                lineHeight: 0.85, fontVariantNumeric: "tabular-nums",
+                transition: "color 0.4s ease",
+                animation: "springIn 0.45s cubic-bezier(0.2, 0, 0, 1) both",
+              }}>{countdownT}</span>
+            <p style={{
+              margin: 0, fontFamily: display, fontSize: 16, fontWeight: 700,
+              color: countdownT === 1 ? labelOnBg : "rgba(255,255,255,0.75)",
+              letterSpacing: 2, textTransform: "uppercase",
+              transition: "color 0.4s ease",
+              animation: "fadeIn 0.4s ease 0.1s both",
+            }}>{step.name}</p>
+          </div>
+        </div>
+      );
+
+      // ─── SCREEN: Idle (pre-exercise — instruction-first) ───────────
+      if (phase === "idle") {
+        return (
+        <div style={{ ...rootStyle, background: C.bg, overflow: "hidden" }}>
+          {/* Active Tree — prominent on the right for desktop */}
+          <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "50%", opacity: 0.9, pointerEvents: "none", zIndex: 0, transform: "translateX(10%)" }}>
+            <TreeBackground
+              exerciseKey={`${si}_${done}`} customTheme={treeTheme}
+              duration={1} growing={true} startCompleted={true}
+            />
+          </div>
+
+          <SoundBtn mute={mute} onToggle={() => setMute(m => !m)} />
+
+          <div style={{ display: "flex", height: "100%", paddingTop: "min(20px, 4vh)", paddingBottom: 24, margin: 0, paddingLeft: "min(24px, 4vw)", position: "relative", zIndex: 1, width: "100%" }}>
+            {/* Timeline Column */}
+            <div style={{ width: "clamp(60px, 12vw, 80px)", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
+              <button 
+                onClick={onBack} 
+                aria-label="Go back to library"
+                style={{ 
+                  background: "none", border: "none", color: C.muted, 
+                  cursor: "pointer", padding: "8px 12px", marginBottom: "min(24px, 3vh)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  borderRadius: 12, transition: "background 0.2s"
+                }}
+                onPointerEnter={(e) => e.currentTarget.style.background = C.faint}
+                onPointerLeave={(e) => e.currentTarget.style.background = "none"}
+                title="Go Back"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+              </button>
+
+              {PLAN.steps.map((s, i) => {
+                if (i < si) return null;
+                if (i > si + 2) return null;
+                const isCurrent = i === si;
+                const bg = isCurrent ? `${exColor}25` : "transparent";
+                return (
+                  <React.Fragment key={i}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color: exColor, zIndex: 2 }}>
+                      {getIcon(s.emoji) ? (
+                        <span className="material-icons" style={{ fontSize: 20 }}>{getIcon(s.emoji)}</span>
+                      ) : (
+                        <span style={{ fontSize: 18 }}>{s.emoji}</span>
+                      )}
+                    </div>
+                    {i < Math.min(si + 2, PLAN.steps.length - 1) && (
+                      <div style={{ width: 2, height: 32, background: `repeating-linear-gradient(to bottom, ${C.faint} 0, ${C.faint} 4px, transparent 4px, transparent 8px)`, margin: "4px 0" }} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            {/* Content Column */}
+            <div style={{ flex: 1, paddingRight: "min(24px, 4vw)", overflowY: "auto", display: "flex", flexDirection: "column", maxWidth: 520 }}>
+              <div style={{ animation: "fadeUp 0.4s ease both", marginBottom: 24 }}>
+                <p style={{ color: exColor, fontSize: 13, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8, marginTop: 12 }}>
+                  {si + 1} OF {PLAN.steps.length} · {fmtMins(remainingSecs)} LEFT
+                </p>
+                <h1 style={{ fontSize: "clamp(28px, 9vw, 52px)", fontWeight: 800, color: C.onBg, lineHeight: 1.05, letterSpacing: -1.5, fontFamily: display, marginBottom: 12 }}>
+                  {step.name}
+                </h1>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontSize: 13, color: exColor, fontWeight: 600, background: exColor+"18", padding: "6px 14px", borderRadius: 100 }}>
+                    {step.sets} sets × {fmt(step.duration)}
+                  </span>
+                  {step.restBetweenSets > 0 && step.sets > 1 && (
+                    <span style={{ fontSize: 13, color: C.rest, fontWeight: 600, background: C.restDim, padding: "6px 14px", borderRadius: 100 }}>
+                      {step.restBetweenSets}s rest
+                    </span>
+                  )}
+                  {step.meta && (
+                    <span style={{ fontSize: 13, color: C.muted, fontWeight: 600, background: C.faint, padding: "6px 14px", borderRadius: 100 }}>
+                      {step.meta}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ background: C.surface, borderRadius: 24, padding: "16px 20px", marginBottom: 16, animation: "fadeUp 0.4s ease 0.1s both" }}>
+                <p style={{ margin: "0 0 12px", fontSize: 12, color: exColor, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>How to do it</p>
+                <div style={{ position: "relative" }}>
+                  <p style={{ 
+                    margin: 0, fontSize: 16, color: C.onBg, lineHeight: 1.55,
+                    overflow: "hidden", 
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical",
+                    WebkitLineClamp: 4, // Default collapsed
+                  }} id={`cue-${si}`}>
+                    {step.cue}
+                  </p>
+                  {step.cue && step.cue.length > 160 && (
+                    <button 
+                      onClick={(e) => {
+                        const p = e.currentTarget.previousSibling;
+                        const isExpanded = p.style.display === "block";
+                        p.style.display = isExpanded ? "-webkit-box" : "block";
+                        e.currentTarget.innerText = isExpanded ? "Read more" : "Show less";
+                      }}
+                      style={{ background: "none", border: "none", color: exColor, fontSize: 11, fontWeight: 700, padding: "8px 0 0", cursor: "pointer", textTransform: "uppercase" }}
+                    >
+                      Read more
+                    </button>
+                  )}
+                </div>
+                
+                {step.why && (
+                  <>
+                    <div style={{ height: 1, background: C.faintHover, margin: "20px 0" }} />
+                    <p style={{ margin: "0 0 8px", fontSize: 12, color: C.muted, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>Why this exercise</p>
+                    <p style={{ margin: 0, fontSize: 14, color: C.muted, fontStyle: "italic", lineHeight: 1.45 }}>{step.why}</p>
+                  </>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <CTASlab
+                  color={exColor}
+                  label={done > 0 ? "Resume" : "Begin"}
+                  details={`${step.sets} sets · ${fmt(step.duration)} each`}
+                  onLaunch={startCountdown}
+                  floods={true}
+                />
+              </div>
+
+              {/* Enhanced Footer: Next + Skip */}
+              {si < PLAN.steps.length - 1 && (
+                <div style={{
+                  marginTop: "auto",
+                  paddingTop: 32,
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: 16, 
+                  fontSize: 12, 
+                  color: C.muted,
+                  animation: "fadeUp 0.4s ease 0.3s both"
+                }}>
+                  <div style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: 10,
+                    background: C.surface,
+                    padding: "8px 16px 8px 12px",
+                    borderRadius: 100,
+                    border: `1px solid ${C.faintHover}`
+                  }}>
+                    {getIcon(PLAN.steps[si + 1].emoji) ? (
+                      <span className="material-icons" style={{ fontSize: 18, color: C.muted }}>{getIcon(PLAN.steps[si + 1].emoji)}</span>
+                    ) : (
+                      <span style={{ fontSize: 18, filter: "grayscale(0.2)" }}>{PLAN.steps[si + 1].emoji}</span>
+                    )}
+                    <span style={{ letterSpacing: 0.3 }}>
+                      <span style={{ opacity: 0.6, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginRight: 8 }}>Next</span>
+                      <b style={{ color: C.onBg, fontWeight: 700 }}>{PLAN.steps[si + 1].name}</b>
+                    </span>
+                  </div>
+                  
+                  <button 
+                    onClick={next} 
+                    onPointerEnter={() => setSkipHover(true)}
+                    onPointerLeave={() => setSkipHover(false)}
+                    style={{ 
+                      background: skipHover ? `${exColor}15` : "none", 
+                      border: "none", 
+                      color: exColor, 
+                      fontSize: 11, 
+                      fontWeight: 800, 
+                      cursor: "pointer", 
+                      padding: "8px 16px", 
+                      borderRadius: 100,
+                      textTransform: "uppercase", 
+                      letterSpacing: 1,
+                      transition: "all 0.2s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
+                    }}
+                  >
+                    Skip
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: skipHover ? 1 : 0.6, transform: `translateX(${skipHover ? "2px" : "0"})`, transition: "all 0.2s ease" }}><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        );
+      }
+
+      // ─── SCREEN: Running (the hero screen) ─────────────────────────
+      if (phase === "running") return (
+        <RunningScreen
+          plan={PLAN} si={si} t={t} step={step} done={done}
+          exColor={exColor} treeTheme={treeTheme} isDark={isDark} onDark={onDark}
+          timerColor={timerColor} mutedOnBg={mutedOnBg} labelOnBg={labelOnBg}
+          particles={particles} mute={mute} setMute={setMute}
+          onBack={onBack} onPause={pause} paused={false}
+          onSetClick={handleSetClick}
+        />
+      );
+
+      if (phase === "paused") return (
+        <RunningScreen
+          plan={PLAN} si={si} t={t} step={step} done={done}
+          exColor={exColor} treeTheme={treeTheme} isDark={isDark} onDark={onDark}
+          timerColor={timerColor} mutedOnBg={mutedOnBg} labelOnBg={labelOnBg}
+          particles={[]} mute={mute} setMute={setMute}
+          onBack={onBack} onPause={pause} paused={true}
+          onResume={resume} onSkip={next}
+          onSetClick={handleSetClick}
+        />
+      );
+
+      // ─── SCREEN: Exercise Done (pride moment) ──────────
+      if (phase === "exDone") {
+        const isLast = si >= PLAN.steps.length - 1;
+        const doneCount = si + 1;
+        const totalCount = PLAN.steps.length;
+        const nextColor = !isLast ? exerciseColor(si + 1) : EXERCISE_COLORS[3];
+        return (
+          <div style={{ ...rootStyle, background: treeTheme.bg, alignItems: "center", justifyContent: "center" }}>
+            {/* Completed tree — glowing behind the check */}
+            <div style={{ position: "absolute", inset: 0, opacity: isDark ? 0.55 : 0.2, pointerEvents: "none", zIndex: 0 }}>
+              <TreeBackground
+                exerciseKey={`${si}_${done}`}
+                customTheme={treeTheme}
+                duration={1}
+                growing={false}
+                startCompleted={true}
+              />
+            </div>
+            {/* Gradient vignette so text stays readable */}
+            <div style={{
+              position: "absolute", inset: 0, background: isDark
+                ? "radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 70%)"
+                : "radial-gradient(ellipse at center, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.15) 70%)",
+              zIndex: 1, pointerEvents: "none"
+            }} />
+
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "20px 0 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, zIndex: 10 }}>
+              <JourneyBar steps={PLAN.steps} currentIndex={si + 1} phase="idle" activeColor={exColor} onDark={onDark} />
+            </div>
+            <button onClick={onBack} style={{ position: "absolute", top: 20, left: 20, background: "none", border: "none", color: mutedOnBg, fontSize: 13, cursor: "pointer", padding: 8, opacity: 0.7, fontFamily: font, zIndex: 20 }}>← Back</button>
+            <SoundBtn mute={mute} onToggle={() => setMute(m => !m)} />
+
+            <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "0 32px", textAlign: "center" }}>
+              <AnimatedCheck size={52} color={isDark ? "rgba(255,255,255,0.9)" : exColor} />
+
+              <div style={{ animation: "fadeUp 0.4s ease 0.2s both" }}>
+                <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: timerColor, letterSpacing: -0.8, fontFamily: display }}>{step.name}</h2>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: isDark ? "rgba(255,255,255,0.55)" : exColor, fontWeight: 600 }}>
+                  {doneCount} of {totalCount} done
+                </p>
+              </div>
+
+              {!isLast ? (
+                <div style={{ animation: "fadeUp 0.4s ease 0.4s both", display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: "100%", maxWidth: 1000 }}>
+                  {/* Next exercise peek */}
+                  <div style={{ padding: "24px 28px", background: isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.6)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: 28, border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(26,26,26,0.05)"}`, width: "100%", maxWidth: 880 }}>
+                    <p style={{ margin: "0 0 16px", fontSize: 12, color: mutedOnBg, letterSpacing: 1.5, fontWeight: 700, textTransform: "uppercase", textAlign: "left" }}>Up next</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <div style={{ position: "relative", width: 56, height: 56, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: nextColor }}>
+                        <M3EChipCanvas width={56} height={56} color={nextColor} opacity={0.15} border={0} />
+                        {getIcon(PLAN.steps[si + 1].emoji) ? (
+                          <span className="material-icons" style={{ fontSize: 28, position: "relative" }}>{getIcon(PLAN.steps[si + 1].emoji)}</span>
+                        ) : (
+                          <span style={{ fontSize: 24, position: "relative" }}>{PLAN.steps[si + 1].emoji}</span>
+                        )}
+                      </div>
+                      <div style={{ textAlign: "left" }}>
+                        <p style={{ margin: "0 0 4px", fontSize: 18, color: timerColor, fontWeight: 700, fontFamily: display, letterSpacing: "-0.01em" }}>{PLAN.steps[si + 1].name}</p>
+                        <p style={{ margin: 0, fontSize: 14, color: mutedOnBg, fontWeight: 500 }}>{PLAN.steps[si + 1].sets} sets × {fmt(PLAN.steps[si + 1].duration)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ width: "100%", maxWidth: 880 }}>
+                    <CTASlab 
+                      color={nextColor} 
+                      label="Continue" 
+                      details={`Ready for ${PLAN.steps[si+1].name}?`}
+                      onLaunch={next} 
+                      floods={false}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ animation: "fadeUp 0.4s ease 0.4s both", width: "100%", maxWidth: 880 }}>
+                  <CTASlab 
+                    color={EXERCISE_COLORS[3]} 
+                    label="Finish workout" 
+                    details="Great work today."
+                    onLaunch={next} 
+                    floods={false}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+      }; // end renderPhase
+
+      const transitionKey = `${phase === "paused" ? "running" : phase}-${si}-${done}`;
+      return (
+        <>
+          <Dialog 
+            open={showConfirmBack} 
+            title="End workout?" 
+            message="Your progress for this session will be lost." 
+            onConfirm={onBackProp} 
+            onCancel={() => setShowConfirmBack(false)} 
+            confirmLabel="End Workout"
+            confirmColor={C.danger}
+          />
+          <ScreenTransition transitionKey={transitionKey}>
+            {renderPhase()}
+          </ScreenTransition>
+        </>
+      );
+    }
+
+    // ─── TRANSITIONS ───────────────────────────────────────────────────
+    function ScreenTransition({ transitionKey, children, style, duration = 250 }) {
+      const [screens, setScreens] = useState([{ key: transitionKey, content: children }]);
+      
+      useEffect(() => {
+        setScreens(prev => {
+          if (prev.length > 0 && prev[prev.length - 1].key === transitionKey) {
+            const updated = [...prev];
+            updated[updated.length - 1].content = children;
+            return updated;
+          }
+          return [...prev, { key: transitionKey, content: children, isEntering: true }];
+        });
+        
+        const timer = setTimeout(() => {
+          setScreens(prev => prev.filter(s => s.key === transitionKey));
+        }, duration);
+        
+        return () => clearTimeout(timer);
+      }, [transitionKey, children, duration]);
+      
+      return (
+        <div style={{ position: "relative", width: "100%", height: "100%", ...style }}>
+          {screens.map(screen => {
+            const isCurrent = screen.key === transitionKey;
+            return (
+              <div
+                key={screen.key}
+                style={{
+                  position: "absolute", inset: 0,
+                  opacity: isCurrent ? 1 : 0,
+                  transition: `opacity ${duration}ms ease`,
+                  pointerEvents: isCurrent ? "auto" : "none",
+                  zIndex: isCurrent ? 1 : 0,
+                }}
+              >
+                {screen.content}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ─── APP ROOT ──────────────────────────────────────────────────────
+    function App() {
+      const [activePlan, setActivePlan] = useState(null);
+      const [manualTheme, setManualTheme] = useState("auto"); // "auto", "light", "dark"
+      
+      const themeOverride = useMemo(() => {
+        if (manualTheme === "auto") return null;
+        return manualTheme;
+      }, [manualTheme]);
+
+      return (
+        <div style={{ width: "100%", height: "100%", background: "#1a1a1b", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(0px, 2vh, 24px) clamp(0px, 2vw, 24px)" }}>
+          <div style={{ width: "100%", height: "100%", maxWidth: "100%", maxHeight: "100%", background: "#fff", borderRadius: 32, overflow: "hidden", display: "flex", boxShadow: "0 40px 100px rgba(0,0,0,0.6)", position: "relative" }}>
+            <ScreenTransition transitionKey={activePlan ? "player" : "library"}>
+              {!activePlan ? (
+                <Library onSelect={setActivePlan} manualTheme={manualTheme} setManualTheme={setManualTheme} />
+              ) : (
+                <PlanPlayer plan={activePlan} themeOverride={themeOverride} onBack={() => setActivePlan(null)} />
+              )}
+            </ScreenTransition>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+
+</html>

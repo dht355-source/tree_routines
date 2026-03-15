@@ -1,0 +1,16 @@
+{
+  "name": "Grove",
+  "short_name": "Grove",
+  "description": "Adaptive, time-aware workout timer and tracking library.",
+  "display": "standalone",
+  "background_color": "#1a1a1b",
+  "theme_color": "#160a03",
+  "start_url": "Workout Timer UI.html",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
